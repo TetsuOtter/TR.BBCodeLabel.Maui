@@ -102,7 +102,7 @@ public static class BBCodeTokenizer
 			}
 		}
 
-		if (iSpanFrom != input.Length)
+		if (iSpanFrom < input.Length)
 		{
 			tokens.Add(new(iSpanFrom, TokenType.Text, input[iSpanFrom..]));
 		}
@@ -113,7 +113,11 @@ public static class BBCodeTokenizer
 	private static void TokenizeTag(in string content, ref int i, List<Token> tokens)
 	{
 		// FIXME: Support escaped characters in tag names and attributes
-		tokens.Add(new(i++, TokenType.TagStart, TAG_START));
+		tokens.Add(new(i, TokenType.TagStart, TAG_START));
+		if (++i == content.Length)
+		{
+			return;
+		}
 
 		if (content[i] == TAG_CLOSE)
 		{
