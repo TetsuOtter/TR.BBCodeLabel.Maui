@@ -104,7 +104,9 @@ public class BBCodeParser
 						}
 						else
 						{
-							attributesDict.Add(attribute.Substring(0, index), attribute.Substring(index + 1));
+							string key = attribute[..index];
+							string value = attribute[(index + 1)..];
+							attributesDict[key] = value;
 						}
 					}
 					tagList.Add(new(tagName, attributesDict));
