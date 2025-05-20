@@ -150,7 +150,7 @@ public static class BBCodeTokenizer
 					tokens.Add(new(iSpanFrom, TokenType.TagAttribute, content[iSpanFrom..i]));
 				}
 				tokens.Add(new(i, TokenType.TagEnd, TAG_END));
-				break;
+				return;
 			}
 			else if (char.IsWhiteSpace(c))
 			{
