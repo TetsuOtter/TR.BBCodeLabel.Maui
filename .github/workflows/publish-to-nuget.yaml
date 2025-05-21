@@ -1,0 +1,65 @@
+name: Publish to NuGet
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Package version (e.g. 1.2.3)"
+        required: true
+        type: string
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build TR.BBCodeLabel.Maui
+        run: >
+          dotnet build
+          TR.BBCodeLabel.Maui/TR.BBCodeLabel.Maui.csproj
+          -c Release
+          -p:Version=${{ github.event.inputs.version }}
+
+      - name: Pack TR.BBCodeLabel.Maui with release notes
+        run: >
+          dotnet pack
+          TR.BBCodeLabel.Maui/TR.BBCodeLabel.Maui.csproj
+          -c Release
+          --no-build
+          -o ./nupkgs
+          -p:Version=${{ github.event.inputs.version }}
+
+      - name: Publish packages to NuGet
+        run: |
+          foreach ($file in Get-ChildItem -Path "./nupkgs" -Filter "*.nupkg") {
+            dotnet nuget push $file.FullName --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+          }
+        shell: pwsh
+
+      - name: Create tag
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag -a v${{ github.event.inputs.version }} -m "Release v${{ github.event.inputs.version }}"
+          git push origin v${{ github.event.inputs.version }}
+
+      - name: Create Release
+        run: >
+          gh release create v${{ github.event.inputs.version }}
+          --draft
+          --generate-notes
+          --repo ${{ github.repository }}
+          --notes 'This release is automatically created by actions ... https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

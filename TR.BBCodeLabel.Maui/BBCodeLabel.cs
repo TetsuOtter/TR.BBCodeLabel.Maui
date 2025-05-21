@@ -5,7 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Graphics;
 
-using TR.BBCodeLabel.Parser;
+using TR.BBCode.Parser;
 
 namespace TR.BBCodeLabel.Maui;
 
