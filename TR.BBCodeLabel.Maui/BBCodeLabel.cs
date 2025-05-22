@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 
+using Microsoft.Maui;
 using Microsoft.Maui.Controls;
 using Microsoft.Maui.Graphics;
 
@@ -25,8 +26,8 @@ public class BBCodeLabel : Label
 		}
 	}
 
-	public Color DefaultLightThemeTextColor { get; set; } = Colors.Black;
-	public Color DefaultDarkThemeTextColor { get; set; } = Colors.White;
+	public Color? DefaultLightThemeTextColor { get; set; }
+	public Color? DefaultDarkThemeTextColor { get; set; }
 
 	public static readonly BindableProperty BBCodeTextProperty = BindableProperty.Create(
 		nameof(BBCodeText),
@@ -54,30 +55,56 @@ public class BBCodeLabel : Label
 			return;
 		}
 
+		static void setFontAttributesFlag(Span span, FontAttributes flag, BBCodeTag tag)
+		{
+			span.FontAttributes |= flag;
+			if (tag.Attributes.TryGetValue(string.Empty, out string? boldAttrStr))
+			{
+				if (bool.TryParse(boldAttrStr, out bool isSet) && !isSet)
+					span.FontAttributes &= ~flag;
+			}
+		}
+		static void setTextDecorationsFlag(Span span, TextDecorations flag, BBCodeTag tag)
+		{
+			span.TextDecorations |= flag;
+			if (tag.Attributes.TryGetValue(string.Empty, out string? boldAttrStr))
+			{
+				if (bool.TryParse(boldAttrStr, out bool isSet) && !isSet)
+					span.TextDecorations &= ~flag;
+			}
+		}
+
 		FormattedString formattedString = new();
 		BBCodeParser.Process(text, (spanText, tags) =>
 		{
 			Span span = new()
 			{
 				Text = spanText,
+				FontAttributes = FontAttributes,
+				TextDecorations = TextDecorations,
+				FontSize = FontSize,
+				FontFamily = FontFamily,
+				FontAutoScalingEnabled = FontAutoScalingEnabled,
+				LineHeight = LineHeight,
+				CharacterSpacing = CharacterSpacing,
 			};
-			Color? lightThemeColor = null;
-			Color? darkThemeColor = null;
+			Color? lightThemeColor = DefaultLightThemeTextColor ?? TextColor;
+			Color? darkThemeColor = DefaultDarkThemeTextColor ?? TextColor;
 			foreach (var tag in tags)
 			{
 				switch (tag.Name)
 				{
 					case BBCodeConstants._TAG_BOLD:
-						span.FontAttributes |= FontAttributes.Bold;
+						setFontAttributesFlag(span, FontAttributes.Bold, tag);
 						break;
 					case BBCodeConstants._TAG_ITALIC:
-						span.FontAttributes |= FontAttributes.Italic;
+						setFontAttributesFlag(span, FontAttributes.Italic, tag);
 						break;
 					case BBCodeConstants._TAG_UNDERLINE:
-						span.TextDecorations |= Microsoft.Maui.TextDecorations.Underline;
+						setTextDecorationsFlag(span, Microsoft.Maui.TextDecorations.Underline, tag);
 						break;
 					case BBCodeConstants._TAG_STRIKETHROUGH:
-						span.TextDecorations |= Microsoft.Maui.TextDecorations.Strikethrough;
+						setTextDecorationsFlag(span, Microsoft.Maui.TextDecorations.Strikethrough, tag);
 						break;
 					case BBCodeConstants._TAG_COLOR:
 						tag.Attributes.TryGetValue(string.Empty, out string? colorStr);
