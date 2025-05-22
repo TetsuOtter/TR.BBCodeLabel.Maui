@@ -46,8 +46,6 @@ public class BBCodeLabel : Label
 		}
 	}
 
-	private new string Text => string.Empty;
-
 	private void OnTextChanged(in string text)
 	{
 		if (string.IsNullOrEmpty(text))
@@ -63,8 +61,8 @@ public class BBCodeLabel : Label
 			{
 				Text = spanText,
 			};
-			Color lightThemeColor = DefaultLightThemeTextColor;
-			Color darkThemeColor = DefaultDarkThemeTextColor;
+			Color? lightThemeColor = null;
+			Color? darkThemeColor = null;
 			foreach (var tag in tags)
 			{
 				switch (tag.Name)
@@ -104,7 +102,14 @@ public class BBCodeLabel : Label
 						break;
 				}
 			}
-			span.SetAppThemeColor(Span.TextColorProperty, lightThemeColor, darkThemeColor);
+			if (lightThemeColor is not null)
+			{
+				if (darkThemeColor is not null)
+					span.SetAppThemeColor(Span.TextColorProperty, lightThemeColor, darkThemeColor);
+				else
+					span.TextColor = lightThemeColor;
+				// ダークのみ設定は対応しない
+			}
 			formattedString.Spans.Add(span);
 		});
 
