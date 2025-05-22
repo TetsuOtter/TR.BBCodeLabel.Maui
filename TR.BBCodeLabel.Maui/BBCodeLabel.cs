@@ -58,18 +58,18 @@ public class BBCodeLabel : Label
 		static void setFontAttributesFlag(Span span, FontAttributes flag, BBCodeTag tag)
 		{
 			span.FontAttributes |= flag;
-			if (tag.Attributes.TryGetValue(string.Empty, out string? boldAttrStr))
+			if (tag.Attributes.TryGetValue(string.Empty, out string? isSetStr))
 			{
-				if (bool.TryParse(boldAttrStr, out bool isSet) && !isSet)
+				if (bool.TryParse(isSetStr, out bool isSet) && !isSet)
 					span.FontAttributes &= ~flag;
 			}
 		}
 		static void setTextDecorationsFlag(Span span, TextDecorations flag, BBCodeTag tag)
 		{
 			span.TextDecorations |= flag;
-			if (tag.Attributes.TryGetValue(string.Empty, out string? boldAttrStr))
+			if (tag.Attributes.TryGetValue(string.Empty, out string? isSetStr))
 			{
-				if (bool.TryParse(boldAttrStr, out bool isSet) && !isSet)
+				if (bool.TryParse(isSetStr, out bool isSet) && !isSet)
 					span.TextDecorations &= ~flag;
 			}
 		}
@@ -82,14 +82,9 @@ public class BBCodeLabel : Label
 				Text = spanText,
 				FontAttributes = FontAttributes,
 				TextDecorations = TextDecorations,
-				FontSize = FontSize,
-				FontFamily = FontFamily,
-				FontAutoScalingEnabled = FontAutoScalingEnabled,
-				LineHeight = LineHeight,
-				CharacterSpacing = CharacterSpacing,
 			};
-			Color? lightThemeColor = DefaultLightThemeTextColor ?? TextColor;
-			Color? darkThemeColor = DefaultDarkThemeTextColor ?? TextColor;
+			Color? lightThemeColor = DefaultLightThemeTextColor;
+			Color? darkThemeColor = DefaultDarkThemeTextColor;
 			foreach (var tag in tags)
 			{
 				switch (tag.Name)
@@ -101,10 +96,10 @@ public class BBCodeLabel : Label
 						setFontAttributesFlag(span, FontAttributes.Italic, tag);
 						break;
 					case BBCodeConstants._TAG_UNDERLINE:
-						setTextDecorationsFlag(span, Microsoft.Maui.TextDecorations.Underline, tag);
+						setTextDecorationsFlag(span, TextDecorations.Underline, tag);
 						break;
 					case BBCodeConstants._TAG_STRIKETHROUGH:
-						setTextDecorationsFlag(span, Microsoft.Maui.TextDecorations.Strikethrough, tag);
+						setTextDecorationsFlag(span, TextDecorations.Strikethrough, tag);
 						break;
 					case BBCodeConstants._TAG_COLOR:
 						tag.Attributes.TryGetValue(string.Empty, out string? colorStr);
