@@ -252,13 +252,21 @@ jobs:
           xcrun simctl list devices booted
 
       - name: Build sample app for simulator
-        run: >
-          dotnet build ${{ env.SAMPLE_PROJECT }}
-          -c Debug
-          -f net8.0-ios
-          -p:RuntimeIdentifier=iossimulator-arm64
-          -p:CodesignKey=""
-          -p:CodesignProvision=""
+        run: |
+          set +e
+          OUT=$(dotnet build ${{ env.SAMPLE_PROJECT }} \
+            -c Debug \
+            -f net8.0-ios \
+            -p:RuntimeIdentifier=iossimulator-arm64 \
+            -p:CodesignKey="" \
+            -p:CodesignProvision="" 2>&1)
+          code=$?
+          printf '%s\n' "$OUT"
+          if [ $code -ne 0 ]; then
+            TAIL=$(printf '%s' "$OUT" | tail -c 4000 | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=Build sample app for simulator (exit ${code})::${TAIL}"
+          fi
+          exit $code
 
       - name: Locate .app bundle
         id: app
@@ -396,14 +404,25 @@ jobs:
 
       - name: Build sample (unpackaged WinUI)
         shell: pwsh
-        run: >
-          dotnet publish ${{ env.SAMPLE_PROJECT }}
-          -c Release
-          -f net8.0-windows10.0.19041.0
-          -p:WindowsPackageType=None
-          -p:WindowsAppSDKSelfContained=true
-          -p:RuntimeIdentifier=win-x64
-          -o artifacts\windows
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $out = & dotnet publish ${{ env.SAMPLE_PROJECT }} `
+            -c Release `
+            -f net8.0-windows10.0.19041.0 `
+            -p:WindowsPackageType=None `
+            -p:WindowsAppSDKSelfContained=true `
+            -p:RuntimeIdentifier=win-x64 `
+            -o artifacts\windows 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Write-Host $out
+          if ($code -ne 0) {
+            $tail = $out
+            if ($tail.Length -gt 4000) { $tail = $tail.Substring($tail.Length - 4000) }
+            $encoded = ($tail -replace "`r`n", "|" -replace "`n", "|" -replace "::", "<COLONS>")
+            if ($encoded.Length -gt 3500) { $encoded = $encoded.Substring(0, 3500) }
+            Write-Host "::error title=Build sample (unpackaged WinUI) (exit $code)::$encoded"
+            exit $code
+          }
 
       - name: Locate sample exe
         id: app
