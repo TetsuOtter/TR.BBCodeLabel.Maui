@@ -76,8 +76,10 @@ public class BBCodeLabel : Label
 		}
 
 		FormattedString formattedString = new();
-		BBCodeParser.Process(text, (spanText, tags) =>
+		try
 		{
+			BBCodeParser.Process(text, (spanText, tags) =>
+			{
 			Span span = new()
 			{
 				Text = spanText,
@@ -134,7 +136,12 @@ public class BBCodeLabel : Label
 				// ダークのみ設定は対応しない
 			}
 			formattedString.Spans.Add(span);
-		});
+			});
+		}
+		catch (BBCodeParserException)
+		{
+			formattedString = new() { Spans = { new Span { Text = text } } };
+		}
 
 		FormattedText = formattedString;
 	}
