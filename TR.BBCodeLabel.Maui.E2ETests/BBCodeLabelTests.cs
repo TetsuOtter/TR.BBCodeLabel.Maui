@@ -10,8 +10,37 @@ public class BBCodeLabelTests
 	AppiumDriver Driver => AppiumServerLifecycle.Driver
 		?? throw new InvalidOperationException("Driver not initialised.");
 
+	static string Platform => (Environment.GetEnvironmentVariable("APPIUM_PLATFORM") ?? "android").ToLowerInvariant();
+
 	IWebElement FindByAutomationId(string automationId)
-		=> Driver.FindElement(MobileBy.AccessibilityId(automationId));
+	{
+		try { return Driver.FindElement(MobileBy.AccessibilityId(automationId)); }
+		catch (WebDriverException) { /* fall through to scroll-and-retry */ }
+
+		ScrollTo(automationId);
+		return Driver.FindElement(MobileBy.AccessibilityId(automationId));
+	}
+
+	void ScrollTo(string automationId)
+	{
+		var args = Platform switch
+		{
+			"ios" => new Dictionary<string, object>
+			{
+				{ "direction", "down" },
+				{ "predicateString", $"name == '{automationId}'" },
+			},
+			"android" => new Dictionary<string, object>
+			{
+				{ "strategy", "accessibility id" },
+				{ "selector", automationId },
+			},
+			_ => null!,
+		};
+		if (args is null) return;
+		try { ((OpenQA.Selenium.IJavaScriptExecutor)Driver).ExecuteScript("mobile: scroll", args); }
+		catch { /* best-effort */ }
+	}
 
 	[Test]
 	public void Header_DisplaysAppName()
