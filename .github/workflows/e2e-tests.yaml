@@ -140,20 +140,24 @@ jobs:
       - name: Diagnose Android emulator prerequisites
         run: |
           set +e
-          echo '===== /dev/kvm ====='
-          ls -la /dev/kvm 2>&1
-          echo '===== KVM access (write to /dev/kvm) ====='
-          if [ -w /dev/kvm ]; then echo "WRITABLE"; else echo "NOT WRITABLE"; fi
-          echo '===== kvm-ok / cpu-info ====='
-          which kvm-ok && kvm-ok 2>&1 || true
-          grep -m1 -E 'vmx|svm' /proc/cpuinfo > /dev/null && echo "VT-x/SVM present" || echo "VT-x/SVM NOT present"
-          echo '===== Android SDK env ====='
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          ls -la "$ANDROID_HOME" 2>&1 | head -30
-          echo '===== sdkmanager / avdmanager ====='
-          which sdkmanager && sdkmanager --version || true
-          which avdmanager && avdmanager --help 2>&1 | head -5 || true
+          {
+            echo '/dev/kvm:'
+            ls -la /dev/kvm 2>&1
+            if [ -w /dev/kvm ]; then echo 'kvm writable: yes'; else echo 'kvm writable: no'; fi
+            grep -m1 -E 'vmx|svm' /proc/cpuinfo > /dev/null && echo 'VT-x/SVM: yes' || echo 'VT-x/SVM: no'
+            echo "ANDROID_HOME=$ANDROID_HOME"
+            echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+            echo 'sdkmanager:'; which sdkmanager 2>&1; sdkmanager --version 2>&1
+            echo 'avdmanager:'; which avdmanager 2>&1
+            echo 'emulator:';   which emulator 2>&1; "$ANDROID_HOME"/emulator/emulator -version 2>&1 | head -3
+            echo 'emulator pkg list:'
+            ls "$ANDROID_HOME"/emulator/ 2>&1 | head -20
+            echo 'system-images:'
+            ls -la "$ANDROID_HOME"/system-images/ 2>&1 | head -20
+          } > /tmp/diag.log 2>&1
+          cat /tmp/diag.log
+          ENCODED=$(cat /tmp/diag.log | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+          echo "::error title=Android prereq diagnostic::${ENCODED}"
           true
 
       - name: Run E2E tests on Android emulator
