@@ -95,7 +95,7 @@ internal static class DriverFactory
 		options.AddAdditionalAppiumOption("appium:wdaStartupRetries", 4);
 		options.AddAdditionalAppiumOption("appium:wdaStartupRetryInterval", 20000);
 		options.AddAdditionalAppiumOption("appium:simulatorStartupTimeout", 600000);
-		options.AddAdditionalAppiumOption("appium:useNewWDA", true);
+		options.AddAdditionalAppiumOption("appium:useNewWDA", false);
 		options.AddAdditionalAppiumOption("appium:showXcodeLog", true);
 		options.AddAdditionalAppiumOption("appium:autoAcceptAlerts", true);
 		options.AddAdditionalAppiumOption("appium:waitForQuiescence", false);
@@ -103,7 +103,7 @@ internal static class DriverFactory
 		options.AddAdditionalAppiumOption("appium:waitForIdleTimeout", 0);
 		options.AddAdditionalAppiumOption("appium:simpleIsVisibleCheck", true);
 
-		return new IOSDriver(serverUri, options, TimeSpan.FromMinutes(5));
+		return new IOSDriver(serverUri, options, TimeSpan.FromMinutes(15));
 	}
 
 	static WindowsDriver CreateWindowsDriver(Uri serverUri)
