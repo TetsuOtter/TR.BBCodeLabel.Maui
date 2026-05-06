@@ -137,6 +137,11 @@ jobs:
           done
           echo "Appium failed to start"; cat appium.stdout.log; exit 1
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'tools platform-tools emulator system-images;android-29;default;x86_64 platforms;android-29 build-tools;34.0.0'
+
       - name: Diagnose Android emulator prerequisites
         run: |
           set +e
