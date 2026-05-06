@@ -13,13 +13,22 @@ public class BBCodeLabelTests
 	static string Platform => (Environment.GetEnvironmentVariable("APPIUM_PLATFORM") ?? "android").ToLowerInvariant();
 
 	[SetUp]
-	public void HideKeyboardBeforeEachTest()
+	public void ResetViewBeforeEachTest()
 	{
 		try
 		{
 			((OpenQA.Selenium.IJavaScriptExecutor)Driver).ExecuteScript("mobile: hideKeyboard");
 		}
-		catch { /* best-effort, only iOS / Android need this */ }
+		catch { /* best-effort */ }
+
+		// Scroll to top of page so every test starts from a consistent state.
+		// Multiple swipes downward (= finger moves down = content scrolls back up).
+		for (int i = 0; i < 8; i++)
+		{
+			Swipe("down");
+			Thread.Sleep(150);
+		}
+		Thread.Sleep(500);
 	}
 
 	IWebElement FindByAutomationId(string automationId)
