@@ -53,9 +53,16 @@ jobs:
           node-version: 20
 
       - name: Install Appium 2 + UiAutomator2 driver
+        shell: bash
         run: |
+          set -ex
+          node --version
+          npm --version
           npm install -g appium@2
-          appium driver install uiautomator2
+          which appium
+          appium --version
+          appium driver install --source=npm appium-uiautomator2-driver
+          appium driver list --installed
 
       - name: Build sample APK
         run: >
@@ -159,9 +166,16 @@ jobs:
           node-version: 20
 
       - name: Install Appium 2 + XCUITest driver
+        shell: bash
         run: |
+          set -ex
+          node --version
+          npm --version
           npm install -g appium@2
-          appium driver install xcuitest
+          which appium
+          appium --version
+          appium driver install --source=npm appium-xcuitest-driver
+          appium driver list --installed
 
       - name: Boot iOS simulator
         run: |
@@ -267,8 +281,16 @@ jobs:
       - name: Install Appium 2 + Windows driver
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          node --version
+          npm --version
           npm install -g appium@2
+          if ($LASTEXITCODE -ne 0) { throw "npm install appium failed: $LASTEXITCODE" }
+          Get-Command appium
+          appium --version
           appium driver install --source=npm appium-windows-driver
+          if ($LASTEXITCODE -ne 0) { throw "appium driver install failed: $LASTEXITCODE" }
+          appium driver list --installed
 
       - name: Build sample (unpackaged WinUI)
         shell: pwsh
