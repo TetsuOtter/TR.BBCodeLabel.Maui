@@ -137,6 +137,12 @@ jobs:
           done
           echo "Appium failed to start"; cat appium.stdout.log; exit 1
 
+      - name: Install Android emulator system libs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpulse0 libnss3 libxcomposite1 libxcursor1 libxi6 libxtst6 libasound2t64 || \
+          sudo apt-get install -y libpulse0 libnss3 libxcomposite1 libxcursor1 libxi6 libxtst6 libasound2
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
