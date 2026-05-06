@@ -137,6 +137,25 @@ jobs:
           done
           echo "Appium failed to start"; cat appium.stdout.log; exit 1
 
+      - name: Diagnose Android emulator prerequisites
+        run: |
+          set +e
+          echo '===== /dev/kvm ====='
+          ls -la /dev/kvm 2>&1
+          echo '===== KVM access (write to /dev/kvm) ====='
+          if [ -w /dev/kvm ]; then echo "WRITABLE"; else echo "NOT WRITABLE"; fi
+          echo '===== kvm-ok / cpu-info ====='
+          which kvm-ok && kvm-ok 2>&1 || true
+          grep -m1 -E 'vmx|svm' /proc/cpuinfo > /dev/null && echo "VT-x/SVM present" || echo "VT-x/SVM NOT present"
+          echo '===== Android SDK env ====='
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          ls -la "$ANDROID_HOME" 2>&1 | head -30
+          echo '===== sdkmanager / avdmanager ====='
+          which sdkmanager && sdkmanager --version || true
+          which avdmanager && avdmanager --help 2>&1 | head -5 || true
+          true
+
       - name: Run E2E tests on Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
