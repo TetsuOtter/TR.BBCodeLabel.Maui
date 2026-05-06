@@ -14,31 +14,33 @@ public class BBCodeLabelTests
 
 	IWebElement FindByAutomationId(string automationId)
 	{
-		try { return Driver.FindElement(MobileBy.AccessibilityId(automationId)); }
-		catch (WebDriverException) { /* fall through to scroll-and-retry */ }
+		var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
+		Exception? last = null;
+		while (DateTime.UtcNow < deadline)
+		{
+			try { return Driver.FindElement(MobileBy.AccessibilityId(automationId)); }
+			catch (WebDriverException ex) { last = ex; }
 
-		ScrollTo(automationId);
-		return Driver.FindElement(MobileBy.AccessibilityId(automationId));
+			Swipe("up");
+			Thread.Sleep(400);
+		}
+		throw last ?? new InvalidOperationException("FindByAutomationId failed");
 	}
 
-	void ScrollTo(string automationId)
+	void Swipe(string direction)
 	{
-		var args = Platform switch
+		try
 		{
-			"ios" => new Dictionary<string, object>
-			{
-				{ "direction", "down" },
-				{ "predicateString", $"name == '{automationId}'" },
-			},
-			"android" => new Dictionary<string, object>
-			{
-				{ "strategy", "accessibility id" },
-				{ "selector", automationId },
-			},
-			_ => null!,
-		};
-		if (args is null) return;
-		try { ((OpenQA.Selenium.IJavaScriptExecutor)Driver).ExecuteScript("mobile: scroll", args); }
+			((OpenQA.Selenium.IJavaScriptExecutor)Driver).ExecuteScript(
+				Platform == "android" ? "mobile: scrollGesture" : "mobile: swipe",
+				Platform == "android"
+					? new Dictionary<string, object>
+					{
+						{ "left", 100 }, { "top", 200 }, { "width", 600 }, { "height", 1000 },
+						{ "direction", direction }, { "percent", 1.0 },
+					}
+					: new Dictionary<string, object> { { "direction", direction } });
+		}
 		catch { /* best-effort */ }
 	}
 
