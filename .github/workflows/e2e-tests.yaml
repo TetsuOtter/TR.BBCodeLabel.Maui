@@ -80,7 +80,20 @@ jobs:
         run: appium --version
 
       - name: appium driver install uiautomator2
-        run: appium driver install --source=npm appium-uiautomator2-driver
+        run: |
+          set +e
+          mkdir -p "$HOME/.appium"
+          OUT=$(appium driver install --source=npm appium-uiautomator2-driver 2>&1)
+          code=$?
+          {
+            echo "### appium driver install uiautomator2 (exit $code)"
+            echo ''
+            echo '```'
+            echo "$OUT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "$OUT"
+          exit $code
 
       - name: appium driver list
         run: appium driver list --installed
@@ -213,7 +226,20 @@ jobs:
         run: appium --version
 
       - name: appium driver install xcuitest
-        run: appium driver install --source=npm appium-xcuitest-driver
+        run: |
+          set +e
+          mkdir -p "$HOME/.appium"
+          OUT=$(appium driver install --source=npm appium-xcuitest-driver 2>&1)
+          code=$?
+          {
+            echo "### appium driver install xcuitest (exit $code)"
+            echo ''
+            echo '```'
+            echo "$OUT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "$OUT"
+          exit $code
 
       - name: appium driver list
         run: appium driver list --installed
@@ -349,7 +375,20 @@ jobs:
 
       - name: appium driver install windows
         shell: pwsh
-        run: appium driver install --source=npm appium-windows-driver
+        run: |
+          $ErrorActionPreference = 'Continue'
+          New-Item -ItemType Directory -Path "$env:USERPROFILE\.appium" -Force | Out-Null
+          $out = & appium driver install --source=npm appium-windows-driver 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          @"
+### appium driver install windows (exit $code)
+
+``````
+$out
+``````
+"@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          Write-Host $out
+          if ($code -ne 0) { exit $code }
 
       - name: appium driver list
         shell: pwsh
