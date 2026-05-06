@@ -26,6 +26,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Print environment
+        run: |
+          set -x
+          uname -a
+          cat /etc/os-release || true
+          echo "PATH=$PATH"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "JAVA_HOME=$JAVA_HOME"
+
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
@@ -38,31 +47,43 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Print dotnet info
+        run: dotnet --info
+
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Install MAUI workload
-        run: dotnet workload install maui-android
+      - name: Restore MAUI workloads
+        run: dotnet workload restore ${{ env.SAMPLE_PROJECT }}
+
+      - name: List installed workloads
+        run: dotnet workload list
 
       - name: Setup Node 20 (for Appium)
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install Appium 2 + UiAutomator2 driver
-        shell: bash
+      - name: Print node / npm versions
         run: |
-          set -ex
           node --version
           npm --version
-          npm install -g appium@2
-          which appium
-          appium --version
-          appium driver install --source=npm appium-uiautomator2-driver
-          appium driver list --installed
+          npm config get prefix
+
+      - name: npm install -g appium@2
+        run: npm install -g appium@2
+
+      - name: appium --version
+        run: appium --version
+
+      - name: appium driver install uiautomator2
+        run: appium driver install --source=npm appium-uiautomator2-driver
+
+      - name: appium driver list
+        run: appium driver list --installed
 
       - name: Build sample APK
         run: >
@@ -152,30 +173,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Print environment
+        run: |
+          set -x
+          uname -a
+          sw_vers || true
+          xcodebuild -version || true
+          echo "PATH=$PATH"
+
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
 
-      - name: Install MAUI workload
-        run: dotnet workload install maui-ios
+      - name: Print dotnet info
+        run: dotnet --info
+
+      - name: Restore MAUI workloads
+        run: dotnet workload restore ${{ env.SAMPLE_PROJECT }}
+
+      - name: List installed workloads
+        run: dotnet workload list
 
       - name: Setup Node 20 (for Appium)
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install Appium 2 + XCUITest driver
-        shell: bash
+      - name: Print node / npm versions
         run: |
-          set -ex
           node --version
           npm --version
-          npm install -g appium@2
-          which appium
-          appium --version
-          appium driver install --source=npm appium-xcuitest-driver
-          appium driver list --installed
+          npm config get prefix
+
+      - name: npm install -g appium@2
+        run: npm install -g appium@2
+
+      - name: appium --version
+        run: appium --version
+
+      - name: appium driver install xcuitest
+        run: appium driver install --source=npm appium-xcuitest-driver
+
+      - name: appium driver list
+        run: appium driver list --installed
 
       - name: Boot iOS simulator
         run: |
@@ -259,13 +300,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Print environment
+        shell: pwsh
+        run: |
+          [System.Environment]::OSVersion
+          $PSVersionTable
+          $env:PATH
+
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
 
-      - name: Install MAUI workload
-        run: dotnet workload install maui-windows
+      - name: Print dotnet info
+        run: dotnet --info
+
+      - name: Restore MAUI workloads
+        run: dotnet workload restore ${{ env.SAMPLE_PROJECT }}
+
+      - name: List installed workloads
+        run: dotnet workload list
 
       - name: Enable Windows developer mode
         shell: pwsh
@@ -278,19 +332,28 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Appium 2 + Windows driver
+      - name: Print node / npm versions
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
           node --version
           npm --version
-          npm install -g appium@2
-          if ($LASTEXITCODE -ne 0) { throw "npm install appium failed: $LASTEXITCODE" }
-          Get-Command appium
-          appium --version
-          appium driver install --source=npm appium-windows-driver
-          if ($LASTEXITCODE -ne 0) { throw "appium driver install failed: $LASTEXITCODE" }
-          appium driver list --installed
+          npm config get prefix
+
+      - name: npm install -g appium@2
+        shell: pwsh
+        run: npm install -g appium@2
+
+      - name: appium --version
+        shell: pwsh
+        run: appium --version
+
+      - name: appium driver install windows
+        shell: pwsh
+        run: appium driver install --source=npm appium-windows-driver
+
+      - name: appium driver list
+        shell: pwsh
+        run: appium driver list --installed
 
       - name: Build sample (unpackaged WinUI)
         shell: pwsh
