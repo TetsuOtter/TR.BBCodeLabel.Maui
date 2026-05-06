@@ -85,14 +85,11 @@ jobs:
           mkdir -p "$HOME/.appium"
           OUT=$(appium driver install --source=npm appium-uiautomator2-driver 2>&1)
           code=$?
-          {
-            echo "### appium driver install uiautomator2 (exit $code)"
-            echo ''
-            echo '```'
-            echo "$OUT"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
           printf '%s\n' "$OUT"
+          if [ $code -ne 0 ]; then
+            ENCODED=$(printf '%s' "$OUT" | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=appium driver install uiautomator2 (exit ${code})::${ENCODED}"
+          fi
           exit $code
 
       - name: appium driver list
@@ -231,14 +228,11 @@ jobs:
           mkdir -p "$HOME/.appium"
           OUT=$(appium driver install --source=npm appium-xcuitest-driver 2>&1)
           code=$?
-          {
-            echo "### appium driver install xcuitest (exit $code)"
-            echo ''
-            echo '```'
-            echo "$OUT"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
           printf '%s\n' "$OUT"
+          if [ $code -ne 0 ]; then
+            ENCODED=$(printf '%s' "$OUT" | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=appium driver install xcuitest (exit ${code})::${ENCODED}"
+          fi
           exit $code
 
       - name: appium driver list
@@ -380,13 +374,13 @@ jobs:
           New-Item -ItemType Directory -Path "$env:USERPROFILE\.appium" -Force | Out-Null
           $out = & appium driver install --source=npm appium-windows-driver 2>&1 | Out-String
           $code = $LASTEXITCODE
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "### appium driver install windows (exit $code)"
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value ''
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```'
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $out
-          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value '```'
           Write-Host $out
-          if ($code -ne 0) { exit $code }
+          if ($code -ne 0) {
+            $encoded = ($out -replace "`r`n", "|" -replace "`n", "|" -replace "::", "<COLONS>")
+            if ($encoded.Length -gt 3500) { $encoded = $encoded.Substring(0, 3500) }
+            Write-Host "::error title=appium driver install windows (exit $code)::$encoded"
+            exit $code
+          }
 
       - name: appium driver list
         shell: pwsh
