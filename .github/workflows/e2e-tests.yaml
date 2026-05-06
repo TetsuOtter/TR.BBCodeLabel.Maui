@@ -187,45 +187,63 @@ jobs:
           echo "::error title=Android prereq diagnostic::${ENCODED}"
           true
 
-      - name: Run E2E tests on Android emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 29
-          arch: x86_64
-          target: default
-          disable-animations: true
-          script: |
-            mkdir -p ./TestResults
-            adb wait-for-device || true
-            adb shell input keyevent 82 || true
-            export APPIUM_PLATFORM=android
-            export APPIUM_SERVER_URL=http://127.0.0.1:4723/
-            export APP_PATH="${{ steps.apk.outputs.path }}"
-            export APP_PACKAGE=${{ env.APP_PACKAGE }}
-            set +e
-            dotnet test ${{ env.TESTS_PROJECT }} -c Release \
-              --logger "trx;LogFileName=android.trx" \
-              --logger "console;verbosity=detailed" \
-              --results-directory ./TestResults > ./TestResults/test.log 2>&1
-            echo $? > ./TestResults/test.exit
-            exit 0
+      - name: Create AVD
+        run: |
+          set -e
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          echo "no" | avdmanager --silent create avd \
+            --name test --package "system-images;android-29;default;x86_64" --force
 
-      - name: Surface Android test result
+      - name: Boot emulator
+        run: |
+          set +e
+          mkdir -p ./TestResults
+          export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH"
+          nohup emulator -avd test \
+            -no-snapshot -no-window -gpu swiftshader_indirect \
+            -noaudio -no-boot-anim -camera-back none \
+            -accel on -read-only > emulator.log 2>&1 &
+          adb wait-for-device
+          for i in $(seq 1 90); do
+            ready=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            if [ "$ready" = "1" ]; then
+              echo "Emulator boot completed after ${i}s"
+              adb shell input keyevent 82 || true
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Emulator boot did not complete within 90s"
+          TAIL=$(tail -c 4000 emulator.log | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+          echo "::error title=Emulator boot timeout::${TAIL}"
+          exit 1
+
+      - name: Run E2E tests on Android emulator
+        env:
+          APPIUM_PLATFORM: android
+          APPIUM_SERVER_URL: http://127.0.0.1:4723/
+          APP_PATH: ${{ steps.apk.outputs.path }}
+          APP_PACKAGE: ${{ env.APP_PACKAGE }}
+        run: |
+          set +e
+          OUT=$(dotnet test ${{ env.TESTS_PROJECT }} -c Release \
+            --logger "trx;LogFileName=android.trx" \
+            --logger "console;verbosity=detailed" \
+            --results-directory ./TestResults 2>&1)
+          code=$?
+          printf '%s\n' "$OUT"
+          if [ $code -ne 0 ]; then
+            TAIL=$(printf '%s' "$OUT" | tail -c 4000 | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=Run E2E tests Android (exit ${code})::${TAIL}"
+          fi
+          exit $code
+
+      - name: Stop emulator
         if: always()
         run: |
-          if [ -f ./TestResults/test.log ]; then
-            echo '===== test.log (full) ====='
-            cat ./TestResults/test.log
-          else
-            echo '::error::./TestResults/test.log was not produced (the test step never ran)'
-            exit 1
-          fi
-          code=$(cat ./TestResults/test.exit 2>/dev/null || echo 99)
-          if [ "$code" != "0" ]; then
-            TAIL=$(tail -c 4000 ./TestResults/test.log | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
-            echo "::error title=Run E2E tests Android (exit ${code})::${TAIL}"
-            exit "${code}"
-          fi
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          adb -s emulator-5554 emu kill || true
+          sleep 2
 
       - name: Upload Appium server logs
         if: always()
@@ -235,6 +253,7 @@ jobs:
           path: |
             appium.log
             appium.stdout.log
+            emulator.log
           if-no-files-found: ignore
 
       - name: Upload test results
