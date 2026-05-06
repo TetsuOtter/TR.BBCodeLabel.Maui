@@ -73,8 +73,8 @@ jobs:
           npm --version
           npm config get prefix
 
-      - name: npm install -g appium@2
-        run: npm install -g appium@2
+      - name: npm install -g appium
+        run: npm install -g appium
 
       - name: appium --version
         run: appium --version
@@ -83,7 +83,7 @@ jobs:
         run: |
           set +e
           mkdir -p "$HOME/.appium"
-          OUT=$(appium driver install --source=npm appium-uiautomator2-driver 2>&1)
+          OUT=$(appium driver install uiautomator2 2>&1)
           code=$?
           printf '%s\n' "$OUT"
           if [ $code -ne 0 ]; then
@@ -216,8 +216,8 @@ jobs:
           npm --version
           npm config get prefix
 
-      - name: npm install -g appium@2
-        run: npm install -g appium@2
+      - name: npm install -g appium
+        run: npm install -g appium
 
       - name: appium --version
         run: appium --version
@@ -226,7 +226,7 @@ jobs:
         run: |
           set +e
           mkdir -p "$HOME/.appium"
-          OUT=$(appium driver install --source=npm appium-xcuitest-driver 2>&1)
+          OUT=$(appium driver install xcuitest 2>&1)
           code=$?
           printf '%s\n' "$OUT"
           if [ $code -ne 0 ]; then
@@ -359,9 +359,9 @@ jobs:
           npm --version
           npm config get prefix
 
-      - name: npm install -g appium@2
+      - name: npm install -g appium
         shell: pwsh
-        run: npm install -g appium@2
+        run: npm install -g appium
 
       - name: appium --version
         shell: pwsh
