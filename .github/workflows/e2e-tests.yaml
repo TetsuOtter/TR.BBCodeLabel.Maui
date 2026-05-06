@@ -146,24 +146,37 @@ jobs:
           profile: pixel_5
           disable-animations: true
           script: |
-            adb wait-for-device
+            mkdir -p ./TestResults
+            adb wait-for-device || true
             adb shell input keyevent 82 || true
             export APPIUM_PLATFORM=android
             export APPIUM_SERVER_URL=http://127.0.0.1:4723/
             export APP_PATH="${{ steps.apk.outputs.path }}"
             export APP_PACKAGE=${{ env.APP_PACKAGE }}
             set +e
-            OUT=$(dotnet test ${{ env.TESTS_PROJECT }} -c Release \
+            dotnet test ${{ env.TESTS_PROJECT }} -c Release \
               --logger "trx;LogFileName=android.trx" \
               --logger "console;verbosity=detailed" \
-              --results-directory ./TestResults 2>&1)
-            code=$?
-            printf '%s\n' "$OUT"
-            if [ $code -ne 0 ]; then
-              TAIL=$(printf '%s' "$OUT" | tail -c 4000 | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
-              echo "::error title=Run E2E tests Android (exit ${code})::${TAIL}"
-            fi
-            exit $code
+              --results-directory ./TestResults > ./TestResults/test.log 2>&1
+            echo $? > ./TestResults/test.exit
+            exit 0
+
+      - name: Surface Android test result
+        if: always()
+        run: |
+          if [ -f ./TestResults/test.log ]; then
+            echo '===== test.log (full) ====='
+            cat ./TestResults/test.log
+          else
+            echo '::error::./TestResults/test.log was not produced (the test step never ran)'
+            exit 1
+          fi
+          code=$(cat ./TestResults/test.exit 2>/dev/null || echo 99)
+          if [ "$code" != "0" ]; then
+            TAIL=$(tail -c 4000 ./TestResults/test.log | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=Run E2E tests Android (exit ${code})::${TAIL}"
+            exit "${code}"
+          fi
 
       - name: Upload Appium server logs
         if: always()
@@ -460,39 +473,7 @@ jobs:
           "path=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           Write-Host "Built exe: $($exe.FullName)"
 
-      - name: Start Appium server
-        shell: pwsh
-        run: |
-          $appiumCmd = (Get-Command appium.cmd -ErrorAction SilentlyContinue) ?? (Get-Command appium)
-          Write-Host "Appium command: $($appiumCmd.Source)"
-          Start-Process -FilePath $appiumCmd.Source `
-            -ArgumentList "--base-path","/","--log","appium.log","--log-level","info" `
-            -RedirectStandardOutput "appium.stdout.log" `
-            -RedirectStandardError "appium.stderr.log" `
-            -NoNewWindow
-          for ($i = 0; $i -lt 60; $i++) {
-            try {
-              $r = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:4723/status" -TimeoutSec 2
-              if ($r.StatusCode -eq 200) { Write-Host "Appium is up"; exit 0 }
-            } catch { }
-            Start-Sleep -Seconds 1
-          }
-          $stdout = if (Test-Path appium.stdout.log) { Get-Content appium.stdout.log -Raw } else { '<no stdout>' }
-          $stderr = if (Test-Path appium.stderr.log) { Get-Content appium.stderr.log -Raw } else { '<no stderr>' }
-          $applog = if (Test-Path appium.log)         { Get-Content appium.log -Raw }         else { '<no appium.log>' }
-          Write-Host "===== appium.stdout ====="
-          Write-Host $stdout
-          Write-Host "===== appium.stderr ====="
-          Write-Host $stderr
-          Write-Host "===== appium.log ====="
-          Write-Host $applog
-          $combined = "stdout:`n$stdout`n`nstderr:`n$stderr`n`nappium.log:`n$applog"
-          $encoded = ($combined -replace "`r`n", "|" -replace "`n", "|" -replace "::", "<COLONS>")
-          if ($encoded.Length -gt 3500) { $encoded = $encoded.Substring(0, 3500) }
-          Write-Host "::error title=Start Appium server (timeout)::$encoded"
-          exit 1
-
-      - name: Run E2E tests
+      - name: Start Appium server + Run E2E tests
         shell: pwsh
         env:
           APPIUM_PLATFORM: windows
@@ -500,14 +481,47 @@ jobs:
           APP_PATH: ${{ steps.app.outputs.path }}
         run: |
           $ErrorActionPreference = 'Continue'
-          $out = & dotnet test ${{ env.TESTS_PROJECT }} -c Release `
+          $appiumCmd = (Get-Command appium.cmd -ErrorAction SilentlyContinue) ?? (Get-Command appium)
+          Write-Host "Appium command: $($appiumCmd.Source)"
+          $proc = Start-Process -FilePath $appiumCmd.Source `
+            -ArgumentList "--base-path","/","--log","appium.log","--log-level","info" `
+            -RedirectStandardOutput "appium.stdout.log" `
+            -RedirectStandardError "appium.stderr.log" `
+            -NoNewWindow -PassThru
+
+          $ready = $false
+          for ($i = 0; $i -lt 60; $i++) {
+            try {
+              $r = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:4723/status" -TimeoutSec 2
+              if ($r.StatusCode -eq 200) { $ready = $true; break }
+            } catch { }
+            Start-Sleep -Seconds 1
+          }
+          if (-not $ready) {
+            $stdout = if (Test-Path appium.stdout.log) { Get-Content appium.stdout.log -Raw } else { '<no stdout>' }
+            $stderr = if (Test-Path appium.stderr.log) { Get-Content appium.stderr.log -Raw } else { '<no stderr>' }
+            Write-Host "Appium failed to start"
+            Write-Host "===== stdout ====="; Write-Host $stdout
+            Write-Host "===== stderr ====="; Write-Host $stderr
+            $combined = "stdout:`n$stdout`n`nstderr:`n$stderr"
+            $encoded = ($combined -replace "`r`n", "|" -replace "`n", "|" -replace "::", "<COLONS>")
+            if ($encoded.Length -gt 3500) { $encoded = $encoded.Substring(0, 3500) }
+            Write-Host "::error title=Start Appium server (timeout)::$encoded"
+            exit 1
+          }
+          Write-Host "Appium is up"
+
+          $testOut = & dotnet test ${{ env.TESTS_PROJECT }} -c Release `
             --logger "trx;LogFileName=windows.trx" `
             --logger "console;verbosity=detailed" `
             --results-directory .\TestResults 2>&1 | Out-String
           $code = $LASTEXITCODE
-          Write-Host $out
+          Write-Host $testOut
+
+          try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch { }
+
           if ($code -ne 0) {
-            $tail = $out
+            $tail = $testOut
             if ($tail.Length -gt 4000) { $tail = $tail.Substring($tail.Length - 4000) }
             $encoded = ($tail -replace "`r`n", "|" -replace "`n", "|" -replace "::", "<COLONS>")
             if ($encoded.Length -gt 3500) { $encoded = $encoded.Substring(0, 3500) }
