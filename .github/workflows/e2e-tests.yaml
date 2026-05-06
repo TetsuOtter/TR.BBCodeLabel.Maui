@@ -96,12 +96,20 @@ jobs:
         run: appium driver list --installed
 
       - name: Build sample APK
-        run: >
-          dotnet publish ${{ env.SAMPLE_PROJECT }}
-          -c Release
-          -f net8.0-android
-          -p:AndroidPackageFormat=apk
-          -o ./artifacts/android
+        run: |
+          set +e
+          OUT=$(dotnet publish ${{ env.SAMPLE_PROJECT }} \
+            -c Release \
+            -f net8.0-android \
+            -p:AndroidPackageFormat=apk \
+            -o ./artifacts/android 2>&1)
+          code=$?
+          printf '%s\n' "$OUT"
+          if [ $code -ne 0 ]; then
+            TAIL=$(printf '%s' "$OUT" | tail -c 4000 | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=Build sample APK (exit ${code})::${TAIL}"
+          fi
+          exit $code
 
       - name: Locate APK
         id: apk
