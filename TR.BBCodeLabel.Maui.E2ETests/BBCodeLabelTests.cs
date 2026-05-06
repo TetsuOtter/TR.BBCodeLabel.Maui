@@ -12,6 +12,16 @@ public class BBCodeLabelTests
 
 	static string Platform => (Environment.GetEnvironmentVariable("APPIUM_PLATFORM") ?? "android").ToLowerInvariant();
 
+	[SetUp]
+	public void HideKeyboardBeforeEachTest()
+	{
+		try
+		{
+			((OpenQA.Selenium.IJavaScriptExecutor)Driver).ExecuteScript("mobile: hideKeyboard");
+		}
+		catch { /* best-effort, only iOS / Android need this */ }
+	}
+
 	IWebElement FindByAutomationId(string automationId)
 	{
 		var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
