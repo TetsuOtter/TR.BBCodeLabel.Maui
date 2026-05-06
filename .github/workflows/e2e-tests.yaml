@@ -272,8 +272,22 @@ jobs:
         run: appium driver list --installed
 
       - name: Boot iOS simulator
+        id: simulator
         run: |
-          xcrun simctl boot "${IOS_DEVICE}" || true
+          set -e
+          UDID=$(xcrun simctl list devices available -j \
+            | python3 -c "import sys,json; data=json.load(sys.stdin); \
+                          [print(d['udid']) for runs in data['devices'].values() for d in runs \
+                           if d.get('name')=='${IOS_DEVICE}'][:1]" \
+            | head -n1)
+          if [ -z "$UDID" ]; then
+            echo "::error::Simulator '${IOS_DEVICE}' not found"
+            xcrun simctl list devices available
+            exit 1
+          fi
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          echo "Booting $UDID (${IOS_DEVICE})"
+          xcrun simctl bootstatus "$UDID" -b
           xcrun simctl list devices booted
 
       - name: Build sample app for simulator
@@ -323,6 +337,7 @@ jobs:
           APP_PATH: ${{ steps.app.outputs.path }}
           APPIUM_DEVICE_NAME: ${{ env.IOS_DEVICE }}
           APPIUM_PLATFORM_VERSION: ${{ env.IOS_VERSION }}
+          APPIUM_UDID: ${{ steps.simulator.outputs.udid }}
         run: |
           set +e
           OUT=$(dotnet test ${{ env.TESTS_PROJECT }} -c Release \

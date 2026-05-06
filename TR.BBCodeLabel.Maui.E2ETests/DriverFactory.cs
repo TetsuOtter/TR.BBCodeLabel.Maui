@@ -14,6 +14,7 @@ internal static class DriverFactory
 	public const string AppActivityEnvVar = "APP_ACTIVITY";
 	public const string DeviceNameEnvVar = "APPIUM_DEVICE_NAME";
 	public const string PlatformVersionEnvVar = "APPIUM_PLATFORM_VERSION";
+	public const string UdidEnvVar = "APPIUM_UDID";
 
 	public static AppiumDriver Create()
 	{
@@ -84,9 +85,14 @@ internal static class DriverFactory
 		if (!string.IsNullOrEmpty(platformVersion))
 			options.PlatformVersion = platformVersion;
 
+		string? udid = Environment.GetEnvironmentVariable(UdidEnvVar);
+		if (!string.IsNullOrEmpty(udid))
+			options.AddAdditionalAppiumOption("appium:udid", udid);
+
 		options.AddAdditionalAppiumOption("appium:newCommandTimeout", 300);
 		options.AddAdditionalAppiumOption("appium:wdaLaunchTimeout", 240000);
 		options.AddAdditionalAppiumOption("appium:wdaConnectionTimeout", 240000);
+		options.AddAdditionalAppiumOption("appium:simulatorStartupTimeout", 600000);
 
 		return new IOSDriver(serverUri, options, TimeSpan.FromMinutes(5));
 	}
