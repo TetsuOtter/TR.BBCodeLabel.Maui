@@ -1,6 +1,5 @@
 using OpenQA.Selenium.Appium;
 using OpenQA.Selenium.Appium.Android;
-using OpenQA.Selenium.Appium.Enums;
 using OpenQA.Selenium.Appium.iOS;
 using OpenQA.Selenium.Appium.Windows;
 
@@ -52,10 +51,10 @@ internal static class DriverFactory
 		}
 		else if (!string.IsNullOrEmpty(appPackage))
 		{
-			options.AddAdditionalAppiumOption(MobileCapabilityType.AppPackage, appPackage);
+			options.AddAdditionalAppiumOption("appPackage", appPackage);
 			string? appActivity = Environment.GetEnvironmentVariable(AppActivityEnvVar);
 			if (!string.IsNullOrEmpty(appActivity))
-				options.AddAdditionalAppiumOption(MobileCapabilityType.AppActivity, appActivity);
+				options.AddAdditionalAppiumOption("appActivity", appActivity);
 		}
 		else
 		{

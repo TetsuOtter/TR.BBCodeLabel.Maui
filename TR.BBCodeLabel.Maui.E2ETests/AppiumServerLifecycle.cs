@@ -18,8 +18,11 @@ public class AppiumServerLifecycle
 	[OneTimeTearDown]
 	public void TearDown()
 	{
-		try { Driver?.Quit(); }
-		catch { /* swallow during teardown */ }
+		var driver = Driver;
 		Driver = null;
+		try { driver?.Quit(); }
+		catch { /* swallow during teardown */ }
+		try { driver?.Dispose(); }
+		catch { /* swallow during teardown */ }
 	}
 }
