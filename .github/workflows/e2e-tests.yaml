@@ -369,6 +369,18 @@ jobs:
           fi
           exit $code
 
+      - name: Surface Appium log (on iOS failure)
+        if: failure()
+        run: |
+          if [ -f appium.log ]; then
+            echo '===== appium.log (tail 4000 chars) ====='
+            tail -c 4000 appium.log
+            TAIL=$(tail -c 4000 appium.log | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=iOS Appium log tail::${TAIL}"
+          else
+            echo "no appium.log produced"
+          fi
+
       - name: Upload Appium server logs
         if: always()
         uses: actions/upload-artifact@v4

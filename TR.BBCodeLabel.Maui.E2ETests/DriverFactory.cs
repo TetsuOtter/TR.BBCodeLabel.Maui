@@ -90,9 +90,14 @@ internal static class DriverFactory
 			options.AddAdditionalAppiumOption("appium:udid", udid);
 
 		options.AddAdditionalAppiumOption("appium:newCommandTimeout", 300);
-		options.AddAdditionalAppiumOption("appium:wdaLaunchTimeout", 240000);
-		options.AddAdditionalAppiumOption("appium:wdaConnectionTimeout", 240000);
+		options.AddAdditionalAppiumOption("appium:wdaLaunchTimeout", 600000);
+		options.AddAdditionalAppiumOption("appium:wdaConnectionTimeout", 600000);
+		options.AddAdditionalAppiumOption("appium:wdaStartupRetries", 4);
+		options.AddAdditionalAppiumOption("appium:wdaStartupRetryInterval", 20000);
 		options.AddAdditionalAppiumOption("appium:simulatorStartupTimeout", 600000);
+		options.AddAdditionalAppiumOption("appium:useNewWDA", true);
+		options.AddAdditionalAppiumOption("appium:showXcodeLog", true);
+		options.AddAdditionalAppiumOption("appium:autoAcceptAlerts", true);
 
 		return new IOSDriver(serverUri, options, TimeSpan.FromMinutes(5));
 	}
