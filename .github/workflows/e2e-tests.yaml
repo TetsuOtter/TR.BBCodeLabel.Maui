@@ -152,7 +152,18 @@ jobs:
             export APPIUM_SERVER_URL=http://127.0.0.1:4723/
             export APP_PATH="${{ steps.apk.outputs.path }}"
             export APP_PACKAGE=${{ env.APP_PACKAGE }}
-            dotnet test ${{ env.TESTS_PROJECT }} -c Release --logger "trx;LogFileName=android.trx" --results-directory ./TestResults
+            set +e
+            OUT=$(dotnet test ${{ env.TESTS_PROJECT }} -c Release \
+              --logger "trx;LogFileName=android.trx" \
+              --logger "console;verbosity=detailed" \
+              --results-directory ./TestResults 2>&1)
+            code=$?
+            printf '%s\n' "$OUT"
+            if [ $code -ne 0 ]; then
+              TAIL=$(printf '%s' "$OUT" | tail -c 4000 | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+              echo "::error title=Run E2E tests Android (exit ${code})::${TAIL}"
+            fi
+            exit $code
 
       - name: Upload Appium server logs
         if: always()
@@ -298,7 +309,19 @@ jobs:
           APP_PATH: ${{ steps.app.outputs.path }}
           APPIUM_DEVICE_NAME: ${{ env.IOS_DEVICE }}
           APPIUM_PLATFORM_VERSION: ${{ env.IOS_VERSION }}
-        run: dotnet test ${{ env.TESTS_PROJECT }} -c Release --logger "trx;LogFileName=ios.trx" --results-directory ./TestResults
+        run: |
+          set +e
+          OUT=$(dotnet test ${{ env.TESTS_PROJECT }} -c Release \
+            --logger "trx;LogFileName=ios.trx" \
+            --logger "console;verbosity=detailed" \
+            --results-directory ./TestResults 2>&1)
+          code=$?
+          printf '%s\n' "$OUT"
+          if [ $code -ne 0 ]; then
+            TAIL=$(printf '%s' "$OUT" | tail -c 4000 | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=Run E2E tests iOS (exit ${code})::${TAIL}"
+          fi
+          exit $code
 
       - name: Upload Appium server logs
         if: always()
@@ -475,7 +498,22 @@ jobs:
           APPIUM_PLATFORM: windows
           APPIUM_SERVER_URL: http://127.0.0.1:4723/
           APP_PATH: ${{ steps.app.outputs.path }}
-        run: dotnet test ${{ env.TESTS_PROJECT }} -c Release --logger "trx;LogFileName=windows.trx" --results-directory .\TestResults
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $out = & dotnet test ${{ env.TESTS_PROJECT }} -c Release `
+            --logger "trx;LogFileName=windows.trx" `
+            --logger "console;verbosity=detailed" `
+            --results-directory .\TestResults 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Write-Host $out
+          if ($code -ne 0) {
+            $tail = $out
+            if ($tail.Length -gt 4000) { $tail = $tail.Substring($tail.Length - 4000) }
+            $encoded = ($tail -replace "`r`n", "|" -replace "`n", "|" -replace "::", "<COLONS>")
+            if ($encoded.Length -gt 3500) { $encoded = $encoded.Substring(0, 3500) }
+            Write-Host "::error title=Run E2E tests Windows (exit $code)::$encoded"
+            exit $code
+          }
 
       - name: Upload Appium server logs
         if: always()
