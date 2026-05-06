@@ -34,17 +34,18 @@ public class BBCodeLabel : Label
 		typeof(string),
 		typeof(BBCodeLabel),
 		defaultValue: string.Empty,
-		defaultBindingMode: BindingMode.OneWay
+		defaultBindingMode: BindingMode.OneWay,
+		propertyChanged: (bindable, oldValue, newValue) =>
+		{
+			if (bindable is BBCodeLabel label)
+				label.OnTextChanged(newValue as string ?? string.Empty);
+		}
 	);
 
 	public string BBCodeText
 	{
 		get => (string)GetValue(BBCodeTextProperty);
-		set
-		{
-			SetValue(BBCodeTextProperty, value);
-			OnTextChanged(value);
-		}
+		set => SetValue(BBCodeTextProperty, value);
 	}
 
 	private void OnTextChanged(in string text)

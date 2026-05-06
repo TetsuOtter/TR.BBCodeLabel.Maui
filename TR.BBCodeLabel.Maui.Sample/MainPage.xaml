@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:bbcode="clr-namespace:TR.BBCodeLabel.Maui;assembly=TR.BBCodeLabel.Maui"
+             x:Class="TR.BBCodeLabel.Maui.Sample.MainPage"
+             Title="TR.BBCodeLabel.Maui Sample">
+    <ScrollView AutomationId="RootScroll">
+        <VerticalStackLayout Padding="16" Spacing="20">
+
+            <Label
+                AutomationId="Header"
+                Text="TR.BBCodeLabel.Maui"
+                FontSize="24"
+                FontAttributes="Bold" />
+
+            <Label
+                Text="A label control for .NET MAUI that renders BBCode markup."
+                FontSize="14" />
+
+            <!-- ========== Live Editor ========== -->
+            <Border
+                Stroke="{AppThemeBinding Light=#CCCCCC, Dark=#444444}"
+                StrokeThickness="1"
+                Padding="12">
+                <VerticalStackLayout Spacing="10">
+                    <Label
+                        Text="Live Editor"
+                        FontSize="18"
+                        FontAttributes="Bold" />
+                    <Label
+                        Text="Type BBCode below and see the rendered output in real time."
+                        FontSize="12" />
+
+                    <Editor
+                        x:Name="LiveEditor"
+                        AutomationId="LiveEditor"
+                        Placeholder="Type BBCode here, e.g. [b]Hello[/b] [color=red]World[/color]"
+                        AutoSize="TextChanges"
+                        HeightRequest="120"
+                        Text="[b]Hello[/b], [color=red]World[/color]!"
+                        TextChanged="OnLiveEditorTextChanged" />
+
+                    <Label
+                        Text="Rendered:"
+                        FontSize="12"
+                        FontAttributes="Bold" />
+                    <bbcode:BBCodeLabel
+                        x:Name="LivePreview"
+                        AutomationId="LivePreview"
+                        FontSize="16"
+                        BBCodeText="[b]Hello[/b], [color=red]World[/color]!" />
+
+                    <Label
+                        Text="Plain text (via Parse().ToPlainText()):"
+                        FontSize="12"
+                        FontAttributes="Bold" />
+                    <Label
+                        x:Name="LivePreviewPlain"
+                        AutomationId="LivePreview_Plain"
+                        FontSize="14"
+                        Text="Hello, World!" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- ========== Feature Showcase ========== -->
+            <Label
+                Text="Feature Showcase"
+                FontSize="20"
+                FontAttributes="Bold" />
+
+            <VerticalStackLayout Spacing="12">
+
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="Bold ([b])" FontAttributes="Bold" FontSize="14" />
+                    <Label AutomationId="Sample_Bold_Source" Text="[b]Bold text[/b]" FontFamily="Courier" FontSize="12" />
+                    <bbcode:BBCodeLabel AutomationId="Sample_Bold" FontSize="16" BBCodeText="[b]Bold text[/b]" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="Italic ([i])" FontAttributes="Bold" FontSize="14" />
+                    <Label AutomationId="Sample_Italic_Source" Text="[i]Italic text[/i]" FontFamily="Courier" FontSize="12" />
+                    <bbcode:BBCodeLabel AutomationId="Sample_Italic" FontSize="16" BBCodeText="[i]Italic text[/i]" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="Underline ([u])" FontAttributes="Bold" FontSize="14" />
+                    <Label AutomationId="Sample_Underline_Source" Text="[u]Underlined[/u]" FontFamily="Courier" FontSize="12" />
+                    <bbcode:BBCodeLabel AutomationId="Sample_Underline" FontSize="16" BBCodeText="[u]Underlined[/u]" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="Strikethrough ([s])" FontAttributes="Bold" FontSize="14" />
+                    <Label AutomationId="Sample_Strike_Source" Text="[s]Strikethrough[/s]" FontFamily="Courier" FontSize="12" />
+                    <bbcode:BBCodeLabel AutomationId="Sample_Strike" FontSize="16" BBCodeText="[s]Strikethrough[/s]" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="Color (named)" FontAttributes="Bold" FontSize="14" />
+                    <Label AutomationId="Sample_ColorNamed_Source" Text="[color=red]red[/color] [color=blue]blue[/color]" FontFamily="Courier" FontSize="12" />
+                    <bbcode:BBCodeLabel AutomationId="Sample_ColorNamed" FontSize="16" BBCodeText="[color=red]red[/color] [color=blue]blue[/color] [color=green]green[/color]" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="Color (#hex)" FontAttributes="Bold" FontSize="14" />
+                    <Label AutomationId="Sample_ColorHex_Source" Text="[color=#FF8800]hex orange[/color]" FontFamily="Courier" FontSize="12" />
+                    <bbcode:BBCodeLabel AutomationId="Sample_ColorHex" FontSize="16" BBCodeText="[color=#FF8800]hex orange[/color]" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="Color (rgb / 0x)" FontAttributes="Bold" FontSize="14" />
+                    <Label AutomationId="Sample_ColorRgb_Source" Text="[color=rgb(255,0,128)]rgb pink[/color] [color=0x00AAFF]0x cyan[/color]" FontFamily="Courier" FontSize="12" />
+                    <bbcode:BBCodeLabel AutomationId="Sample_ColorRgb" FontSize="16" BBCodeText="[color=rgb(255,0,128)]rgb pink[/color] [color=0x00AAFF]0x cyan[/color]" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="Color (light / dark theme)" FontAttributes="Bold" FontSize="14" />
+                    <Label AutomationId="Sample_ColorTheme_Source" Text="[color light=black dark=white]theme aware[/color]" FontFamily="Courier" FontSize="12" />
+                    <bbcode:BBCodeLabel AutomationId="Sample_ColorTheme" FontSize="16" BBCodeText="[color light=black dark=white]theme aware[/color]" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="Size ([size])" FontAttributes="Bold" FontSize="14" />
+                    <Label AutomationId="Sample_Size_Source" Text="[size=12]12[/size] [size=18]18[/size] [size=24]24[/size]" FontFamily="Courier" FontSize="12" />
+                    <bbcode:BBCodeLabel AutomationId="Sample_Size" BBCodeText="[size=12]12[/size] [size=18]18[/size] [size=24]24[/size]" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="Font ([font])" FontAttributes="Bold" FontSize="14" />
+                    <Label AutomationId="Sample_Font_Source" Text="[font=OpenSansSemibold]Semibold via font tag[/font]" FontFamily="Courier" FontSize="12" />
+                    <bbcode:BBCodeLabel AutomationId="Sample_Font" FontSize="16" BBCodeText="[font=OpenSansSemibold]Semibold via font tag[/font]" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="Combined / nested" FontAttributes="Bold" FontSize="14" />
+                    <Label AutomationId="Sample_Combined_Source" Text="[b][color=blue]Bold blue[/color][/b] [i][u]italic underline[/u][/i]" FontFamily="Courier" FontSize="12" />
+                    <bbcode:BBCodeLabel AutomationId="Sample_Combined" FontSize="16" BBCodeText="[b][color=blue]Bold blue[/color][/b] [i][u]italic underline[/u][/i]" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="Escape characters" FontAttributes="Bold" FontSize="14" />
+                    <Label AutomationId="Sample_Escape_Source" Text="literal: \[b\]not bold\[/b\]" FontFamily="Courier" FontSize="12" />
+                    <bbcode:BBCodeLabel AutomationId="Sample_Escape" FontSize="16" BBCodeText="literal: \[b\]not bold\[/b\]" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout Spacing="2">
+                    <Label Text="Disable flag (e.g. [b=false])" FontAttributes="Bold" FontSize="14" />
+                    <Label AutomationId="Sample_Disable_Source" Text="[b]bold [b=false]not bold[/b] bold[/b]" FontFamily="Courier" FontSize="12" />
+                    <bbcode:BBCodeLabel AutomationId="Sample_Disable" FontSize="16" BBCodeText="[b]bold [b=false]not bold[/b] bold[/b]" />
+                </VerticalStackLayout>
+
+            </VerticalStackLayout>
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

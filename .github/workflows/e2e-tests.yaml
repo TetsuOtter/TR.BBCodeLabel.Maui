@@ -1,0 +1,337 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  # =====================================================================
+  # Android: builds the sample as APK, boots an emulator, runs Appium
+  # =====================================================================
+  android:
+    name: Android E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      DOTNET_NOLOGO: 1
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      SAMPLE_PROJECT: TR.BBCodeLabel.Maui.Sample/TR.BBCodeLabel.Maui.Sample.csproj
+      TESTS_PROJECT: TR.BBCodeLabel.Maui.E2ETests/TR.BBCodeLabel.Maui.E2ETests.csproj
+      APP_PACKAGE: com.techotter.bbcodelabel.sample
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install MAUI workload
+        run: dotnet workload install maui-android
+
+      - name: Setup Node 20 (for Appium)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Appium 2 + UiAutomator2 driver
+        run: |
+          npm install -g appium@2
+          appium driver install uiautomator2
+
+      - name: Build sample APK
+        run: >
+          dotnet publish ${{ env.SAMPLE_PROJECT }}
+          -c Release
+          -f net8.0-android
+          -p:AndroidPackageFormat=apk
+          -o ./artifacts/android
+
+      - name: Locate APK
+        id: apk
+        run: |
+          APK=$(find ./artifacts/android -maxdepth 2 -name "${APP_PACKAGE}-Signed.apk" | head -n1)
+          if [ -z "$APK" ]; then
+            APK=$(find ./artifacts/android -maxdepth 2 -name "*.apk" | head -n1)
+          fi
+          if [ -z "$APK" ]; then
+            echo "::error::APK not found"
+            ls -R ./artifacts/android
+            exit 1
+          fi
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+          echo "Built APK: $APK"
+
+      - name: Start Appium server
+        run: |
+          nohup appium --base-path / --log appium.log --log-level info --relaxed-security > appium.stdout.log 2>&1 &
+          for i in {1..30}; do
+            if curl -sSf http://127.0.0.1:4723/status > /dev/null; then
+              echo "Appium is up"; exit 0
+            fi
+            sleep 1
+          done
+          echo "Appium failed to start"; cat appium.stdout.log; exit 1
+
+      - name: Run E2E tests on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          disable-animations: true
+          script: |
+            adb wait-for-device
+            adb shell input keyevent 82 || true
+            export APPIUM_PLATFORM=android
+            export APPIUM_SERVER_URL=http://127.0.0.1:4723/
+            export APP_PATH="${{ steps.apk.outputs.path }}"
+            export APP_PACKAGE=${{ env.APP_PACKAGE }}
+            dotnet test ${{ env.TESTS_PROJECT }} -c Release --logger "trx;LogFileName=android.trx" --results-directory ./TestResults
+
+      - name: Upload Appium server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appium-logs-android
+          path: |
+            appium.log
+            appium.stdout.log
+          if-no-files-found: ignore
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-android
+          path: TestResults/
+          if-no-files-found: ignore
+
+  # =====================================================================
+  # iOS: builds the sample for the simulator, boots one, runs Appium
+  # =====================================================================
+  ios:
+    name: iOS E2E
+    runs-on: macos-14
+    timeout-minutes: 75
+
+    env:
+      DOTNET_NOLOGO: 1
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      SAMPLE_PROJECT: TR.BBCodeLabel.Maui.Sample/TR.BBCodeLabel.Maui.Sample.csproj
+      TESTS_PROJECT: TR.BBCodeLabel.Maui.E2ETests/TR.BBCodeLabel.Maui.E2ETests.csproj
+      IOS_DEVICE: iPhone 15
+      IOS_VERSION: "17.5"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install MAUI workload
+        run: dotnet workload install maui-ios
+
+      - name: Setup Node 20 (for Appium)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Appium 2 + XCUITest driver
+        run: |
+          npm install -g appium@2
+          appium driver install xcuitest
+
+      - name: Boot iOS simulator
+        run: |
+          xcrun simctl boot "${IOS_DEVICE}" || true
+          xcrun simctl list devices booted
+
+      - name: Build sample app for simulator
+        run: >
+          dotnet build ${{ env.SAMPLE_PROJECT }}
+          -c Debug
+          -f net8.0-ios
+          -p:RuntimeIdentifier=iossimulator-arm64
+          -p:CodesignKey=""
+          -p:CodesignProvision=""
+
+      - name: Locate .app bundle
+        id: app
+        run: |
+          APP=$(find TR.BBCodeLabel.Maui.Sample/bin/Debug/net8.0-ios -type d -name "*.app" | head -n1)
+          if [ -z "$APP" ]; then
+            echo "::error::.app bundle not found"
+            find TR.BBCodeLabel.Maui.Sample/bin -type d -name "*.app" || true
+            exit 1
+          fi
+          echo "path=$APP" >> "$GITHUB_OUTPUT"
+          echo "Built app: $APP"
+
+      - name: Start Appium server
+        run: |
+          nohup appium --base-path / --log appium.log --log-level info > appium.stdout.log 2>&1 &
+          for i in {1..30}; do
+            if curl -sSf http://127.0.0.1:4723/status > /dev/null; then
+              echo "Appium is up"; exit 0
+            fi
+            sleep 1
+          done
+          echo "Appium failed to start"; cat appium.stdout.log; exit 1
+
+      - name: Run E2E tests
+        env:
+          APPIUM_PLATFORM: ios
+          APPIUM_SERVER_URL: http://127.0.0.1:4723/
+          APP_PATH: ${{ steps.app.outputs.path }}
+          APPIUM_DEVICE_NAME: ${{ env.IOS_DEVICE }}
+          APPIUM_PLATFORM_VERSION: ${{ env.IOS_VERSION }}
+        run: dotnet test ${{ env.TESTS_PROJECT }} -c Release --logger "trx;LogFileName=ios.trx" --results-directory ./TestResults
+
+      - name: Upload Appium server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appium-logs-ios
+          path: |
+            appium.log
+            appium.stdout.log
+          if-no-files-found: ignore
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-ios
+          path: TestResults/
+          if-no-files-found: ignore
+
+  # =====================================================================
+  # Windows: builds the unpackaged WinUI sample, runs Appium with the
+  # Appium Windows Driver (which wraps WinAppDriver under the hood)
+  # =====================================================================
+  windows:
+    name: Windows E2E
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    env:
+      DOTNET_NOLOGO: 1
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      SAMPLE_PROJECT: TR.BBCodeLabel.Maui.Sample\TR.BBCodeLabel.Maui.Sample.csproj
+      TESTS_PROJECT: TR.BBCodeLabel.Maui.E2ETests\TR.BBCodeLabel.Maui.E2ETests.csproj
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install MAUI workload
+        run: dotnet workload install maui-windows
+
+      - name: Enable Windows developer mode
+        shell: pwsh
+        run: |
+          New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Force | Out-Null
+          Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Name "AllowDevelopmentWithoutDevLicense" -Value 1 -Type DWord -Force
+
+      - name: Setup Node 20 (for Appium)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Appium 2 + Windows driver
+        shell: pwsh
+        run: |
+          npm install -g appium@2
+          appium driver install --source=npm appium-windows-driver
+
+      - name: Build sample (unpackaged WinUI)
+        shell: pwsh
+        run: >
+          dotnet publish ${{ env.SAMPLE_PROJECT }}
+          -c Release
+          -f net8.0-windows10.0.19041.0
+          -p:WindowsPackageType=None
+          -p:WindowsAppSDKSelfContained=true
+          -p:RuntimeIdentifier=win10-x64
+          -o artifacts\windows
+
+      - name: Locate sample exe
+        id: app
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path artifacts\windows -Filter "TR.BBCodeLabel.Maui.Sample.exe" -Recurse | Select-Object -First 1
+          if (-not $exe) {
+            Write-Error "Sample exe not found"
+            Get-ChildItem -Path artifacts\windows -Recurse | Select-Object FullName
+            exit 1
+          }
+          "path=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Built exe: $($exe.FullName)"
+
+      - name: Start Appium server
+        shell: pwsh
+        run: |
+          Start-Process -FilePath "appium" -ArgumentList "--base-path","/","--log","appium.log","--log-level","info" -RedirectStandardOutput "appium.stdout.log" -RedirectStandardError "appium.stderr.log" -NoNewWindow
+          for ($i = 0; $i -lt 30; $i++) {
+            try {
+              $r = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:4723/status" -TimeoutSec 2
+              if ($r.StatusCode -eq 200) { Write-Host "Appium is up"; exit 0 }
+            } catch { }
+            Start-Sleep -Seconds 1
+          }
+          Write-Host "Appium failed to start"
+          if (Test-Path appium.stdout.log) { Get-Content appium.stdout.log }
+          exit 1
+
+      - name: Run E2E tests
+        shell: pwsh
+        env:
+          APPIUM_PLATFORM: windows
+          APPIUM_SERVER_URL: http://127.0.0.1:4723/
+          APP_PATH: ${{ steps.app.outputs.path }}
+        run: dotnet test ${{ env.TESTS_PROJECT }} -c Release --logger "trx;LogFileName=windows.trx" --results-directory .\TestResults
+
+      - name: Upload Appium server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appium-logs-windows
+          path: |
+            appium.log
+            appium.stdout.log
+            appium.stderr.log
+          if-no-files-found: ignore
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-windows
+          path: TestResults\
+          if-no-files-found: ignore

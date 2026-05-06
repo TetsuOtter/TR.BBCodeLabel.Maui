@@ -22,7 +22,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
-		<PackageReference Include="TR.BBCode.Parser" Version="0.1.0" />
+		<PackageReference Include="TR.BBCode.Parser" Version="0.2.0" />
 	</ItemGroup>
 
 	<ItemGroup>
