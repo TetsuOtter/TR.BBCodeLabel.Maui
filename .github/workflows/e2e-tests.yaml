@@ -163,8 +163,14 @@ jobs:
             echo 'emulator:';   which emulator 2>&1; "$ANDROID_HOME"/emulator/emulator -version 2>&1 | head -3
             echo 'emulator pkg list:'
             ls "$ANDROID_HOME"/emulator/ 2>&1 | head -20
-            echo 'system-images:'
-            ls -la "$ANDROID_HOME"/system-images/ 2>&1 | head -20
+            echo 'system-images tree (3 levels):'
+            find "$ANDROID_HOME"/system-images -maxdepth 3 -mindepth 1 2>&1 | head -50
+            echo 'platforms:'
+            ls -la "$ANDROID_HOME"/platforms/ 2>&1 | head -10
+            echo 'platform-tools:'
+            ls -la "$ANDROID_HOME"/platform-tools/ 2>&1 | head -10
+            echo 'build-tools:'
+            ls -la "$ANDROID_HOME"/build-tools/ 2>&1 | head -10
           } > /tmp/diag.log 2>&1
           cat /tmp/diag.log
           ENCODED=$(cat /tmp/diag.log | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
