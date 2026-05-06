@@ -148,6 +148,16 @@ jobs:
         with:
           packages: 'tools platform-tools emulator system-images;android-29;default;x86_64 platforms;android-29 build-tools;34.0.0'
 
+      - name: Symlink cmdline-tools/latest
+        run: |
+          set -e
+          if [ ! -e "$ANDROID_HOME/cmdline-tools/latest" ]; then
+            ver=$(ls "$ANDROID_HOME/cmdline-tools" | sort -V | tail -n1)
+            echo "Symlinking cmdline-tools/latest -> cmdline-tools/$ver"
+            ln -sf "$ANDROID_HOME/cmdline-tools/$ver" "$ANDROID_HOME/cmdline-tools/latest"
+          fi
+          ls -la "$ANDROID_HOME/cmdline-tools/"
+
       - name: Diagnose Android emulator prerequisites
         run: |
           set +e
