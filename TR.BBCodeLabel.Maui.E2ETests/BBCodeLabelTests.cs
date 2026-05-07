@@ -42,13 +42,20 @@ public class BBCodeLabelTests
 		{
 			try
 			{
-				((OpenQA.Selenium.IJavaScriptExecutor)Driver).ExecuteScript(
-					"mobile: scroll",
-					new Dictionary<string, object>
-					{
-						{ "strategy", "accessibility id" },
-						{ "selector", automationId },
-					});
+				var args = new Dictionary<string, object>
+				{
+					{ "strategy", "accessibility id" },
+					{ "selector", automationId },
+					{ "maxSwipes", 30 },
+				};
+				try
+				{
+					var rootScroll = Driver.FindElement(MobileBy.AccessibilityId("RootScroll"));
+					args["elementId"] = ((AppiumElement)rootScroll).Id;
+				}
+				catch { /* root scroll not always findable; let UiAutomator2 pick */ }
+
+				((OpenQA.Selenium.IJavaScriptExecutor)Driver).ExecuteScript("mobile: scroll", args);
 				return Driver.FindElement(MobileBy.AccessibilityId(automationId));
 			}
 			catch (WebDriverException) { /* fall through to swipe loop */ }
