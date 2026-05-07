@@ -39,17 +39,15 @@ public class BBCodeLabelTests
 		// Android: prefer UiAutomator's built-in scrollIntoView, which scrolls
 		// the first matching scrollable container until the target element
 		// (matched here by AccessibilityIdentifier == content-desc) is on
-		// screen. This is markedly more reliable than mobile: scroll's
-		// strategy/selector mode, which silently caps at maxSwipes=5 and
-		// can pick the wrong scrollable on a page with nested layouts.
+		// screen.
 		if (Platform == "android")
 		{
 			try
 			{
 				var uia =
-					"new UiScrollable(new UiSelector().scrollable(true)" +
-					".instance(0)).scrollIntoView(" +
-					"new UiSelector().description(\"" + automationId + "\"));";
+					"new UiScrollable(new UiSelector().scrollable(true))" +
+					".setMaxSearchSwipes(30).scrollIntoView(" +
+					"new UiSelector().descriptionContains(\"" + automationId + "\"))";
 				Driver.FindElement(MobileBy.AndroidUIAutomator(uia));
 				return Driver.FindElement(MobileBy.AccessibilityId(automationId));
 			}
