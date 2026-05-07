@@ -9,7 +9,6 @@
 
             <Label
                 AutomationId="Header"
-                SemanticProperties.Description="Header"
                 Text="TR.BBCodeLabel.Maui"
                 FontSize="24"
                 FontAttributes="Bold" />
@@ -35,7 +34,6 @@
                     <Editor
                         x:Name="LiveEditor"
                         AutomationId="LiveEditor"
-                        SemanticProperties.Description="LiveEditor"
                         Placeholder="Type BBCode here, e.g. [b]Hello[/b] [color=red]World[/color]"
                         AutoSize="TextChanges"
                         HeightRequest="120"
@@ -49,7 +47,6 @@
                     <bbcode:BBCodeLabel
                         x:Name="LivePreview"
                         AutomationId="LivePreview"
-                        SemanticProperties.Description="LivePreview"
                         FontSize="16"
                         BBCodeText="[b]Hello[/b], [color=red]World[/color]!" />
 
@@ -60,7 +57,6 @@
                     <Label
                         x:Name="LivePreviewPlain"
                         AutomationId="LivePreview_Plain"
-                        SemanticProperties.Description="LivePreview_Plain"
                         FontSize="14"
                         Text="Hello, World!" />
                 </VerticalStackLayout>
