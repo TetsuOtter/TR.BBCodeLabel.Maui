@@ -145,9 +145,21 @@ public class BBCodeLabelTests
 
 		// SendKeys raises the soft keyboard which then hides everything below
 		// the Editor (including the LivePreview_Plain label we're about to
-		// query). Dismiss it before going looking.
+		// query). Try multiple dismissal strategies and give the layout a
+		// moment to settle.
 		try { ((OpenQA.Selenium.IJavaScriptExecutor)Driver).ExecuteScript("mobile: hideKeyboard"); }
 		catch { /* best-effort */ }
+		if (Platform == "android")
+		{
+			try
+			{
+				((OpenQA.Selenium.IJavaScriptExecutor)Driver).ExecuteScript(
+					"mobile: pressKey",
+					new Dictionary<string, object> { { "keycode", 4 } }); // KEYCODE_BACK
+			}
+			catch { /* best-effort */ }
+		}
+		Thread.Sleep(500);
 
 		var plain = FindByAutomationId("LivePreview_Plain");
 
