@@ -143,6 +143,12 @@ public class BBCodeLabelTests
 		editor.Clear();
 		editor.SendKeys("[i]Live[/i] [b]update[/b]!");
 
+		// SendKeys raises the soft keyboard which then hides everything below
+		// the Editor (including the LivePreview_Plain label we're about to
+		// query). Dismiss it before going looking.
+		try { ((OpenQA.Selenium.IJavaScriptExecutor)Driver).ExecuteScript("mobile: hideKeyboard"); }
+		catch { /* best-effort */ }
+
 		var plain = FindByAutomationId("LivePreview_Plain");
 
 		WaitUntil(() => plain.Text == "Live update!", TimeSpan.FromSeconds(10));
