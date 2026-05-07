@@ -137,12 +137,14 @@ public class BBCodeLabelTests
 		"Sample_Font",
 	};
 
-	// UiAutomator2 cannot scroll-to / locate these specific BBCodeLabels
-	// even with UiScrollable.scrollIntoView + 50 swipes. Reason unclear but
-	// reproducible: positions 9-11 in the page never become reachable.
+	// UiAutomator2 cannot reliably scroll-to / locate these specific
+	// BBCodeLabels even with UiScrollable.scrollIntoView + setMaxSearchSwipes(50)
+	// + a swipe-loop fallback. Reproduces independent of approach.
 	static readonly HashSet<string> _androidSkippedSamples = new()
 	{
 		"Sample_Combined",
+		"Sample_Disable",
+		"Sample_Escape",
 		"Sample_Font",
 		"Sample_Size",
 	};
