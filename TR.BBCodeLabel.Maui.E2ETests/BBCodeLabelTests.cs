@@ -54,7 +54,7 @@ public class BBCodeLabelTests
 			catch (WebDriverException) { /* fall through to swipe loop */ }
 		}
 
-		var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
+		var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(45);
 		Exception? last = null;
 		while (DateTime.UtcNow < deadline)
 		{
@@ -62,7 +62,7 @@ public class BBCodeLabelTests
 			catch (WebDriverException ex) { last = ex; }
 
 			Swipe("up");
-			Thread.Sleep(400);
+			Thread.Sleep(300);
 		}
 		throw last ?? new InvalidOperationException("FindByAutomationId failed");
 	}

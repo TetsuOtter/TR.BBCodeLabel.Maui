@@ -12,7 +12,10 @@ public class AppiumServerLifecycle
 	public void SetUp()
 	{
 		Driver = DriverFactory.Create();
-		Driver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(15);
+		// Keep ImplicitWait small so FindByAutomationId's retry+swipe loop
+		// actually gets to iterate (otherwise each FindElement blocks 15s
+		// before throwing and the loop only runs once).
+		Driver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(2);
 	}
 
 	[OneTimeTearDown]
