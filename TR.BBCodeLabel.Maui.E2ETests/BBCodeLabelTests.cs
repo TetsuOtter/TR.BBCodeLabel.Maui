@@ -33,6 +33,27 @@ public class BBCodeLabelTests
 
 	IWebElement FindByAutomationId(string automationId)
 	{
+		try { return Driver.FindElement(MobileBy.AccessibilityId(automationId)); }
+		catch (WebDriverException) { /* element off-screen, fall through */ }
+
+		// Android: UiAutomator2 can scroll the parent scrollable until the
+		// target element matches by accessibility id in a single command.
+		if (Platform == "android")
+		{
+			try
+			{
+				((OpenQA.Selenium.IJavaScriptExecutor)Driver).ExecuteScript(
+					"mobile: scroll",
+					new Dictionary<string, object>
+					{
+						{ "strategy", "accessibility id" },
+						{ "selector", automationId },
+					});
+				return Driver.FindElement(MobileBy.AccessibilityId(automationId));
+			}
+			catch (WebDriverException) { /* fall through to swipe loop */ }
+		}
+
 		var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
 		Exception? last = null;
 		while (DateTime.UtcNow < deadline)
@@ -50,15 +71,24 @@ public class BBCodeLabelTests
 	{
 		try
 		{
-			((OpenQA.Selenium.IJavaScriptExecutor)Driver).ExecuteScript(
-				Platform == "android" ? "mobile: scrollGesture" : "mobile: swipe",
-				Platform == "android"
-					? new Dictionary<string, object>
+			if (Platform == "android")
+			{
+				var size = Driver.Manage().Window.Size;
+				((OpenQA.Selenium.IJavaScriptExecutor)Driver).ExecuteScript(
+					"mobile: swipeGesture",
+					new Dictionary<string, object>
 					{
-						{ "left", 100 }, { "top", 200 }, { "width", 600 }, { "height", 1000 },
-						{ "direction", direction }, { "percent", 1.0 },
-					}
-					: new Dictionary<string, object> { { "direction", direction } });
+						{ "left", 0 }, { "top", 0 },
+						{ "width", size.Width }, { "height", size.Height },
+						{ "direction", direction }, { "percent", 0.7 },
+					});
+			}
+			else
+			{
+				((OpenQA.Selenium.IJavaScriptExecutor)Driver).ExecuteScript(
+					"mobile: swipe",
+					new Dictionary<string, object> { { "direction", direction } });
+			}
 		}
 		catch { /* best-effort */ }
 	}
