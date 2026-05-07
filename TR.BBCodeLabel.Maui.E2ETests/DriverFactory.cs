@@ -101,6 +101,7 @@ internal static class DriverFactory
 		options.AddAdditionalAppiumOption("appium:waitForQuiescence", false);
 		options.AddAdditionalAppiumOption("appium:reduceMotion", true);
 		options.AddAdditionalAppiumOption("appium:waitForIdleTimeout", 0);
+		options.AddAdditionalAppiumOption("appium:simpleIsVisibleCheck", true);
 
 		return new IOSDriver(serverUri, options, TimeSpan.FromMinutes(15));
 	}
