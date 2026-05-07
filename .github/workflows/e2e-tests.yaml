@@ -248,8 +248,18 @@ jobs:
           code=$?
           printf '%s\n' "$OUT"
           if [ $code -ne 0 ]; then
+            # Surface every "Failed " block (test name + a few lines of detail)
+            # as its own annotation so it isn't drowned out by Skipped lines.
+            printf '%s\n' "$OUT" | awk '
+              /^\s*Failed /,/^\s*$/  { print; next }
+              /Passed:|Failed:|Skipped:|Total:/  { print }
+            ' | head -c 8000 > /tmp/failed_extract.log || true
+            if [ -s /tmp/failed_extract.log ]; then
+              ENCODED=$(cat /tmp/failed_extract.log | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+              echo "::error title=Run E2E tests Android failed tests::${ENCODED}"
+            fi
             TAIL=$(printf '%s' "$OUT" | tail -c 4000 | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
-            echo "::error title=Run E2E tests Android (exit ${code})::${TAIL}"
+            echo "::error title=Run E2E tests Android (exit ${code}) tail::${TAIL}"
           fi
           exit $code
 
