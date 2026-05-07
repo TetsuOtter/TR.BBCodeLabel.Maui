@@ -39,15 +39,16 @@ public class BBCodeLabelTests
 		// Android: prefer UiAutomator's built-in scrollIntoView, which scrolls
 		// the first matching scrollable container until the target element
 		// (matched here by AccessibilityIdentifier == content-desc) is on
-		// screen.
+		// screen. Use exact .description() match — descriptionContains() also
+		// matches the "<id>_Source" label rendering the BBCode literal.
 		if (Platform == "android")
 		{
 			try
 			{
 				var uia =
 					"new UiScrollable(new UiSelector().scrollable(true))" +
-					".setMaxSearchSwipes(30).scrollIntoView(" +
-					"new UiSelector().descriptionContains(\"" + automationId + "\"))";
+					".setMaxSearchSwipes(50).scrollIntoView(" +
+					"new UiSelector().description(\"" + automationId + "\"))";
 				Driver.FindElement(MobileBy.AndroidUIAutomator(uia));
 				return Driver.FindElement(MobileBy.AccessibilityId(automationId));
 			}
