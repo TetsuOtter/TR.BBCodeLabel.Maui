@@ -191,8 +191,22 @@ jobs:
         run: |
           set -e
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          # No --device flag: a profile (e.g. pixel_5) that doesn't match the
+          # system-image tag silently produces an empty AVD directory.
           echo "no" | avdmanager --silent create avd \
             --name test --package "system-images;android-29;default;x86_64" --force
+          if [ ! -d "$ANDROID_AVD_HOME/test.avd" ]; then
+            echo "::error::AVD directory was not created"
+            avdmanager list avd
+            exit 1
+          fi
+          # Bigger display + more cores: the default 320x640 / 1-core AVD
+          # boots slowly and accessibility queries flake out.
+          printf 'hw.cpu.ncore=2\nhw.lcd.width=1080\nhw.lcd.height=2400\nhw.lcd.density=420\n' \
+            >> "$ANDROID_AVD_HOME/test.avd/config.ini"
 
       - name: Boot emulator
         run: |
@@ -202,21 +216,22 @@ jobs:
           nohup emulator -avd test \
             -no-snapshot -no-window -gpu swiftshader_indirect \
             -noaudio -no-boot-anim -camera-back none \
-            -accel on -read-only > emulator.log 2>&1 &
+            -accel on > emulator.log 2>&1 &
+          echo "EMULATOR_PID=$!" >> "$GITHUB_ENV"
           adb wait-for-device
-          for i in $(seq 1 90); do
-            ready=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-            if [ "$ready" = "1" ]; then
-              echo "Emulator boot completed after ${i}s"
-              adb shell input keyevent 82 || true
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "Emulator boot did not complete within 90s"
-          TAIL=$(tail -c 4000 emulator.log | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
-          echo "::error title=Emulator boot timeout::${TAIL}"
-          exit 1
+          # Boot can take 3-5 minutes on GHA Linux runners; allow up to 5.
+          if ! timeout 300 bash -c 'until adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r" | grep -q "^1$"; do sleep 5; done'; then
+            echo "Emulator boot did not complete within 300s"
+            TAIL=$(tail -c 4000 emulator.log | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=Emulator boot timeout::${TAIL}"
+            exit 1
+          fi
+          # Disable animations for faster + more reliable UI tests.
+          adb shell settings put global window_animation_scale 0.0 || true
+          adb shell settings put global transition_animation_scale 0.0 || true
+          adb shell settings put global animator_duration_scale 0.0 || true
+          adb shell input keyevent 82 || true
+          echo "Emulator is ready"
 
       - name: Run E2E tests on Android emulator
         env:
@@ -226,7 +241,7 @@ jobs:
           APP_PACKAGE: ${{ env.APP_PACKAGE }}
         run: |
           set +e
-          OUT=$(dotnet test ${{ env.TESTS_PROJECT }} -c Release \
+          OUT=$(timeout 900 dotnet test ${{ env.TESTS_PROJECT }} -c Release \
             --logger "trx;LogFileName=android.trx" \
             --logger "console;verbosity=detailed" \
             --results-directory ./TestResults 2>&1)
@@ -238,12 +253,24 @@ jobs:
           fi
           exit $code
 
+      - name: Dump logcat on failure
+        if: failure()
+        run: |
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          adb logcat -d -t 500 2>/dev/null || true
+
       - name: Stop emulator
         if: always()
         run: |
+          # `adb emu kill` alone often leaves QEMU running for 30+ minutes,
+          # hitting the workflow timeout. Force-kill instead.
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
-          adb -s emulator-5554 emu kill || true
-          sleep 2
+          adb emu kill 2>/dev/null || true
+          pkill -9 -f "qemu-system-x86" 2>/dev/null || true
+          pkill -9 -f "/emulator/emulator" 2>/dev/null || true
+          if [ -n "${EMULATOR_PID:-}" ]; then
+            kill -9 "$EMULATOR_PID" 2>/dev/null || true
+          fi
 
       - name: Upload Appium server logs
         if: always()
