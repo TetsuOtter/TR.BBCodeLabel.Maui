@@ -49,6 +49,22 @@ public class BBCodeLabelTests
 		throw last ?? new InvalidOperationException("FindByAutomationId failed");
 	}
 
+	// On iOS, when SemanticProperties.Description is set on a Label, MAUI
+	// also sets the AccessibilityLabel. element.Text on a UILabel then
+	// returns that AccessibilityLabel (the AutomationId string) rather
+	// than the displayed text. The displayed text is exposed via the
+	// `value` attribute. Android / Windows return displayed text via .Text.
+	static string GetVisibleText(IWebElement element)
+	{
+		if (Platform == "ios")
+		{
+			var v = element.GetAttribute("value");
+			if (!string.IsNullOrEmpty(v))
+				return v;
+		}
+		return element.Text ?? string.Empty;
+	}
+
 	void Swipe(string direction)
 	{
 		try
@@ -79,7 +95,7 @@ public class BBCodeLabelTests
 	public void Header_DisplaysAppName()
 	{
 		var header = FindByAutomationId("Header");
-		Assert.That(header.Text, Is.EqualTo("TR.BBCodeLabel.Maui"));
+		Assert.That(GetVisibleText(header), Is.EqualTo("TR.BBCodeLabel.Maui"));
 	}
 
 	[TestCase("Sample_Bold",        "Bold text")]
@@ -115,7 +131,7 @@ public class BBCodeLabelTests
 			Assert.Ignore($"Skipped on Android: UiAutomator2 + MAUI ScrollView locates BBCodeLabel samples non-deterministically");
 
 		var label = FindByAutomationId(automationId);
-		Assert.That(NormalizeWhitespace(label.Text), Is.EqualTo(expected));
+		Assert.That(NormalizeWhitespace(GetVisibleText(label)), Is.EqualTo(expected));
 	}
 
 	// xcuitest "Cannot convert undefined or null to object" on complex
@@ -132,7 +148,7 @@ public class BBCodeLabelTests
 	public void LiveEditor_InitialPreview_MatchesPlainText()
 	{
 		var plain = FindByAutomationId("LivePreview_Plain");
-		Assert.That(plain.Text, Is.EqualTo("Hello, World!"));
+		Assert.That(GetVisibleText(plain), Is.EqualTo("Hello, World!"));
 	}
 
 	[Test]
@@ -163,8 +179,8 @@ public class BBCodeLabelTests
 
 		var plain = FindByAutomationId("LivePreview_Plain");
 
-		WaitUntil(() => plain.Text == "Live update!", TimeSpan.FromSeconds(10));
-		Assert.That(plain.Text, Is.EqualTo("Live update!"));
+		WaitUntil(() => GetVisibleText(plain) == "Live update!", TimeSpan.FromSeconds(10));
+		Assert.That(GetVisibleText(plain), Is.EqualTo("Live update!"));
 	}
 
 	static string NormalizeWhitespace(string? input)
