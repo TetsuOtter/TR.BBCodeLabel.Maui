@@ -36,26 +36,21 @@ public class BBCodeLabelTests
 		try { return Driver.FindElement(MobileBy.AccessibilityId(automationId)); }
 		catch (WebDriverException) { /* element off-screen, fall through */ }
 
-		// Android: UiAutomator2 can scroll the parent scrollable until the
-		// target element matches by accessibility id in a single command.
+		// Android: prefer UiAutomator's built-in scrollIntoView, which scrolls
+		// the first matching scrollable container until the target element
+		// (matched here by AccessibilityIdentifier == content-desc) is on
+		// screen. This is markedly more reliable than mobile: scroll's
+		// strategy/selector mode, which silently caps at maxSwipes=5 and
+		// can pick the wrong scrollable on a page with nested layouts.
 		if (Platform == "android")
 		{
 			try
 			{
-				var args = new Dictionary<string, object>
-				{
-					{ "strategy", "accessibility id" },
-					{ "selector", automationId },
-					{ "maxSwipes", 30 },
-				};
-				try
-				{
-					var rootScroll = Driver.FindElement(MobileBy.AccessibilityId("RootScroll"));
-					args["elementId"] = ((AppiumElement)rootScroll).Id;
-				}
-				catch { /* root scroll not always findable; let UiAutomator2 pick */ }
-
-				((OpenQA.Selenium.IJavaScriptExecutor)Driver).ExecuteScript("mobile: scroll", args);
+				var uia =
+					"new UiScrollable(new UiSelector().scrollable(true)" +
+					".instance(0)).scrollIntoView(" +
+					"new UiSelector().description(\"" + automationId + "\"));";
+				Driver.FindElement(MobileBy.AndroidUIAutomator(uia));
 				return Driver.FindElement(MobileBy.AccessibilityId(automationId));
 			}
 			catch (WebDriverException) { /* fall through to swipe loop */ }
