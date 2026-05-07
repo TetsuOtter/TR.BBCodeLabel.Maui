@@ -151,10 +151,28 @@ public class BBCodeLabelTests
 		Assert.That(GetVisibleText(plain), Is.EqualTo("Hello, World!"));
 	}
 
+	IWebElement FindEditor()
+	{
+		// On Android, AccessibilityId (content-desc) lookup is unreliable
+		// for EditText: the Android accessibility service often ignores
+		// content-desc on editable views in favour of the hint / typed text.
+		// There's only one Editor on the page, so locate it by class.
+		if (Platform == "android")
+		{
+			try
+			{
+				return Driver.FindElement(MobileBy.AndroidUIAutomator(
+					"new UiSelector().className(\"android.widget.EditText\").instance(0)"));
+			}
+			catch (WebDriverException) { /* fall back to AccessibilityId */ }
+		}
+		return FindByAutomationId("LiveEditor");
+	}
+
 	[Test]
 	public void LiveEditor_TypingUpdatesPreview()
 	{
-		var editor = FindByAutomationId("LiveEditor");
+		var editor = FindEditor();
 		editor.Click();
 		editor.Clear();
 		editor.SendKeys("[i]Live[/i] [b]update[/b]!");
