@@ -318,6 +318,11 @@ jobs:
           xcodebuild -version || true
           echo "PATH=$PATH"
 
+      - name: Setup Xcode (latest stable on the runner)
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v4
         with:
@@ -325,6 +330,17 @@ jobs:
 
       - name: Print dotnet info
         run: dotnet --info
+
+      - name: Download iOS simulator runtime (if needed)
+        run: |
+          if xcrun simctl list runtimes | grep -qi ios; then
+            echo "iOS simulator runtime already available."
+            xcrun simctl list runtimes | grep -i ios
+          else
+            echo "No iOS simulator runtime found; downloading..."
+            xcodebuild -downloadPlatform iOS
+            xcrun simctl list runtimes
+          fi
 
       - name: Restore MAUI workloads
         run: dotnet workload restore ${{ env.SAMPLE_PROJECT }}
