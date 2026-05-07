@@ -102,7 +102,6 @@ jobs:
             -c Release \
             -f net8.0-android \
             -r android-x64 \
-            --self-contained \
             -p:AndroidPackageFormat=apk \
             -p:EmbedAssembliesIntoApk=true \
             -p:AndroidCreatePackagePerAbi=false \
@@ -270,14 +269,22 @@ jobs:
       - name: Surface Appium log (on Android failure)
         if: failure()
         run: |
-          if [ -f appium.log ]; then
-            echo '===== appium.log (tail 6000 chars) ====='
-            tail -c 6000 appium.log
-            TAIL=$(tail -c 4000 appium.log | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
-            echo "::error title=Android Appium log tail::${TAIL}"
-          else
+          if [ ! -f appium.log ]; then
             echo "no appium.log produced"
+            exit 0
           fi
+          echo '===== appium.log (full) ====='
+          cat appium.log
+          # Surface in chunks of ~3KB, grepping for app-launch / activity / error
+          # related lines so the most actionable bits aren't truncated by GitHub.
+          grep -E "MainActivity|launchApp|installApp|ActivityNotFound|crash|Error|FATAL|appActivity|appPackage|content-desc" appium.log \
+            | head -c 6000 > /tmp/appium-key.log
+          if [ -s /tmp/appium-key.log ]; then
+            ENC=$(cat /tmp/appium-key.log | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=Android Appium log (key lines)::${ENC}"
+          fi
+          ENC2=$(tail -c 3500 appium.log | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+          echo "::error title=Android Appium log (tail)::${ENC2}"
 
       - name: Dump logcat on failure
         if: failure()
