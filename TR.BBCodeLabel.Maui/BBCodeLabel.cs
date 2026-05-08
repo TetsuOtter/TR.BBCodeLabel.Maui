@@ -15,13 +15,13 @@ public class BBCodeLabel : Label
 	static readonly Dictionary<string, Color> _colorCache = [];
 	static BBCodeLabel()
 	{
-		foreach (var prop in typeof(Colors).GetProperties())
+		foreach (var field in typeof(Colors).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
 		{
-			if (prop.PropertyType == typeof(Color))
+			if (field.FieldType == typeof(Color))
 			{
-				var color = prop.GetValue(null) as Color;
+				var color = field.GetValue(null) as Color;
 				if (color is not null && color != Colors.Transparent)
-					_colorCache.Add(prop.Name.ToLower(), color);
+					_colorCache.Add(field.Name.ToLower(), color);
 			}
 		}
 	}
