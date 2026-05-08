@@ -15,13 +15,13 @@ public class BBCodeLabel : Label
 	static readonly Dictionary<string, Color> _colorCache = [];
 	static BBCodeLabel()
 	{
-		foreach (var prop in typeof(Colors).GetProperties())
+		foreach (var field in typeof(Colors).GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
 		{
-			if (prop.PropertyType == typeof(Color))
+			if (field.FieldType == typeof(Color))
 			{
-				var color = prop.GetValue(null) as Color;
+				var color = field.GetValue(null) as Color;
 				if (color is not null && color != Colors.Transparent)
-					_colorCache.Add(prop.Name.ToLower(), color);
+					_colorCache.Add(field.Name.ToLower(), color);
 			}
 		}
 	}
@@ -34,17 +34,18 @@ public class BBCodeLabel : Label
 		typeof(string),
 		typeof(BBCodeLabel),
 		defaultValue: string.Empty,
-		defaultBindingMode: BindingMode.OneWay
+		defaultBindingMode: BindingMode.OneWay,
+		propertyChanged: (bindable, oldValue, newValue) =>
+		{
+			if (bindable is BBCodeLabel label)
+				label.OnTextChanged(newValue as string ?? string.Empty);
+		}
 	);
 
 	public string BBCodeText
 	{
 		get => (string)GetValue(BBCodeTextProperty);
-		set
-		{
-			SetValue(BBCodeTextProperty, value);
-			OnTextChanged(value);
-		}
+		set => SetValue(BBCodeTextProperty, value);
 	}
 
 	private void OnTextChanged(in string text)
@@ -75,8 +76,10 @@ public class BBCodeLabel : Label
 		}
 
 		FormattedString formattedString = new();
-		BBCodeParser.Process(text, (spanText, tags) =>
+		try
 		{
+			BBCodeParser.Process(text, (spanText, tags) =>
+			{
 			Span span = new()
 			{
 				Text = spanText,
@@ -133,7 +136,12 @@ public class BBCodeLabel : Label
 				// ダークのみ設定は対応しない
 			}
 			formattedString.Spans.Add(span);
-		});
+			});
+		}
+		catch (BBCodeParserException)
+		{
+			formattedString = new() { Spans = { new Span { Text = text } } };
+		}
 
 		FormattedText = formattedString;
 	}

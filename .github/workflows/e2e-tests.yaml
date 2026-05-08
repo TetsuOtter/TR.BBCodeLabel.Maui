@@ -1,0 +1,723 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  # =====================================================================
+  # Android: builds the sample as APK, boots an emulator, runs Appium
+  # =====================================================================
+  android:
+    name: Android E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      DOTNET_NOLOGO: 1
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      SAMPLE_PROJECT: TR.BBCodeLabel.Maui.Sample/TR.BBCodeLabel.Maui.Sample.csproj
+      TESTS_PROJECT: TR.BBCodeLabel.Maui.E2ETests/TR.BBCodeLabel.Maui.E2ETests.csproj
+      APP_PACKAGE: com.techotter.bbcodelabel.sample
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Print environment
+        run: |
+          set -x
+          uname -a
+          cat /etc/os-release || true
+          echo "PATH=$PATH"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "JAVA_HOME=$JAVA_HOME"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Print dotnet info
+        run: dotnet --info
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Restore MAUI workloads
+        run: dotnet workload restore ${{ env.SAMPLE_PROJECT }}
+
+      - name: List installed workloads
+        run: dotnet workload list
+
+      - name: Setup Node 20 (for Appium)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Print node / npm versions
+        run: |
+          node --version
+          npm --version
+          npm config get prefix
+
+      - name: npm install -g appium
+        run: npm install -g appium
+
+      - name: appium --version
+        run: appium --version
+
+      - name: appium driver install uiautomator2
+        run: |
+          set +e
+          mkdir -p "$HOME/.appium"
+          OUT=$(appium driver install uiautomator2 2>&1)
+          code=$?
+          printf '%s\n' "$OUT"
+          if [ $code -ne 0 ]; then
+            ENCODED=$(printf '%s' "$OUT" | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=appium driver install uiautomator2 (exit ${code})::${ENCODED}"
+          fi
+          exit $code
+
+      - name: appium driver list
+        run: appium driver list --installed
+
+      - name: Build sample APK
+        run: |
+          set +e
+          OUT=$(dotnet publish ${{ env.SAMPLE_PROJECT }} \
+            -c Release \
+            -f net8.0-android \
+            -r android-x64 \
+            -p:AndroidPackageFormat=apk \
+            -p:EmbedAssembliesIntoApk=true \
+            -p:AndroidCreatePackagePerAbi=false \
+            -o ./artifacts/android 2>&1)
+          code=$?
+          printf '%s\n' "$OUT"
+          if [ $code -ne 0 ]; then
+            TAIL=$(printf '%s' "$OUT" | tail -c 4000 | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=Build sample APK (exit ${code})::${TAIL}"
+          fi
+          exit $code
+
+      - name: Locate APK
+        id: apk
+        run: |
+          APK=$(find ./artifacts/android -maxdepth 2 -name "${APP_PACKAGE}-Signed.apk" | head -n1)
+          if [ -z "$APK" ]; then
+            APK=$(find ./artifacts/android -maxdepth 2 -name "*.apk" | head -n1)
+          fi
+          if [ -z "$APK" ]; then
+            echo "::error::APK not found"
+            ls -R ./artifacts/android
+            exit 1
+          fi
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+          echo "Built APK: $APK"
+
+      - name: Start Appium server
+        run: |
+          nohup appium --base-path / --log appium.log --log-level info --relaxed-security > appium.stdout.log 2>&1 &
+          for i in {1..30}; do
+            if curl -sSf http://127.0.0.1:4723/status > /dev/null; then
+              echo "Appium is up"; exit 0
+            fi
+            sleep 1
+          done
+          echo "Appium failed to start"; cat appium.stdout.log; exit 1
+
+      - name: Install Android emulator system libs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpulse0 libnss3 libxcomposite1 libxcursor1 libxi6 libxtst6 libasound2t64 || \
+          sudo apt-get install -y libpulse0 libnss3 libxcomposite1 libxcursor1 libxi6 libxtst6 libasound2
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'tools platform-tools emulator system-images;android-29;default;x86_64 platforms;android-29 build-tools;34.0.0'
+
+      - name: Symlink cmdline-tools/latest
+        run: |
+          set -e
+          if [ ! -e "$ANDROID_HOME/cmdline-tools/latest" ]; then
+            ver=$(ls "$ANDROID_HOME/cmdline-tools" | sort -V | tail -n1)
+            echo "Symlinking cmdline-tools/latest -> cmdline-tools/$ver"
+            ln -sf "$ANDROID_HOME/cmdline-tools/$ver" "$ANDROID_HOME/cmdline-tools/latest"
+          fi
+          ls -la "$ANDROID_HOME/cmdline-tools/"
+
+      - name: Diagnose Android emulator prerequisites
+        run: |
+          set +e
+          {
+            echo '/dev/kvm:'
+            ls -la /dev/kvm 2>&1
+            if [ -w /dev/kvm ]; then echo 'kvm writable: yes'; else echo 'kvm writable: no'; fi
+            grep -m1 -E 'vmx|svm' /proc/cpuinfo > /dev/null && echo 'VT-x/SVM: yes' || echo 'VT-x/SVM: no'
+            echo "ANDROID_HOME=$ANDROID_HOME"
+            echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+            echo 'sdkmanager:'; which sdkmanager 2>&1; sdkmanager --version 2>&1
+            echo 'avdmanager:'; which avdmanager 2>&1
+            echo 'emulator:';   which emulator 2>&1; "$ANDROID_HOME"/emulator/emulator -version 2>&1 | head -3
+            echo 'emulator pkg list:'
+            ls "$ANDROID_HOME"/emulator/ 2>&1 | head -20
+            echo 'system-images tree (3 levels):'
+            find "$ANDROID_HOME"/system-images -maxdepth 3 -mindepth 1 2>&1 | head -50
+            echo 'platforms:'
+            ls -la "$ANDROID_HOME"/platforms/ 2>&1 | head -10
+            echo 'platform-tools:'
+            ls -la "$ANDROID_HOME"/platform-tools/ 2>&1 | head -10
+            echo 'build-tools:'
+            ls -la "$ANDROID_HOME"/build-tools/ 2>&1 | head -10
+          } > /tmp/diag.log 2>&1
+          cat /tmp/diag.log
+          ENCODED=$(cat /tmp/diag.log | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+          echo "::error title=Android prereq diagnostic::${ENCODED}"
+          true
+
+      - name: Create AVD
+        run: |
+          set -e
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          # No --device flag: a profile (e.g. pixel_5) that doesn't match the
+          # system-image tag silently produces an empty AVD directory.
+          echo "no" | avdmanager --silent create avd \
+            --name test --package "system-images;android-29;default;x86_64" --force
+          if [ ! -d "$ANDROID_AVD_HOME/test.avd" ]; then
+            echo "::error::AVD directory was not created"
+            avdmanager list avd
+            exit 1
+          fi
+          # Bigger display + more cores: the default 320x640 / 1-core AVD
+          # boots slowly and accessibility queries flake out.
+          printf 'hw.cpu.ncore=2\nhw.lcd.width=1080\nhw.lcd.height=2400\nhw.lcd.density=420\n' \
+            >> "$ANDROID_AVD_HOME/test.avd/config.ini"
+
+      - name: Boot emulator
+        run: |
+          set +e
+          mkdir -p ./TestResults
+          export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH"
+          nohup emulator -avd test \
+            -no-snapshot -no-window -gpu swiftshader_indirect \
+            -noaudio -no-boot-anim -camera-back none \
+            -accel on > emulator.log 2>&1 &
+          echo "EMULATOR_PID=$!" >> "$GITHUB_ENV"
+          adb wait-for-device
+          # Boot can take 3-5 minutes on GHA Linux runners; allow up to 5.
+          if ! timeout 300 bash -c 'until adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r" | grep -q "^1$"; do sleep 5; done'; then
+            echo "Emulator boot did not complete within 300s"
+            TAIL=$(tail -c 4000 emulator.log | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=Emulator boot timeout::${TAIL}"
+            exit 1
+          fi
+          # Disable animations for faster + more reliable UI tests.
+          adb shell settings put global window_animation_scale 0.0 || true
+          adb shell settings put global transition_animation_scale 0.0 || true
+          adb shell settings put global animator_duration_scale 0.0 || true
+          adb shell input keyevent 82 || true
+          echo "Emulator is ready"
+
+      - name: Run E2E tests on Android emulator
+        env:
+          APPIUM_PLATFORM: android
+          APPIUM_SERVER_URL: http://127.0.0.1:4723/
+          APP_PATH: ${{ steps.apk.outputs.path }}
+          APP_PACKAGE: ${{ env.APP_PACKAGE }}
+        run: |
+          set +e
+          OUT=$(timeout 900 dotnet test ${{ env.TESTS_PROJECT }} -c Release \
+            --logger "trx;LogFileName=android.trx" \
+            --logger "console;verbosity=detailed" \
+            --results-directory ./TestResults 2>&1)
+          code=$?
+          printf '%s\n' "$OUT"
+          if [ $code -ne 0 ]; then
+            # Surface every "Failed " block (test name + a few lines of detail)
+            # as its own annotation so it isn't drowned out by Skipped lines.
+            printf '%s\n' "$OUT" | awk '
+              /^\s*Failed /,/^\s*$/  { print; next }
+              /Passed:|Failed:|Skipped:|Total:/  { print }
+            ' | head -c 8000 > /tmp/failed_extract.log || true
+            if [ -s /tmp/failed_extract.log ]; then
+              ENCODED=$(cat /tmp/failed_extract.log | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+              echo "::error title=Run E2E tests Android failed tests::${ENCODED}"
+            fi
+            TAIL=$(printf '%s' "$OUT" | tail -c 4000 | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=Run E2E tests Android (exit ${code}) tail::${TAIL}"
+          fi
+          exit $code
+
+      - name: Surface Appium log (on Android failure)
+        if: failure()
+        run: |
+          if [ ! -f appium.log ]; then
+            echo "no appium.log produced"
+            exit 0
+          fi
+          echo '===== appium.log (full) ====='
+          cat appium.log
+          # Surface in chunks of ~3KB, grepping for app-launch / activity / error
+          # related lines so the most actionable bits aren't truncated by GitHub.
+          grep -E "MainActivity|launchApp|installApp|ActivityNotFound|crash|Error|FATAL|appActivity|appPackage|content-desc" appium.log \
+            | head -c 6000 > /tmp/appium-key.log
+          if [ -s /tmp/appium-key.log ]; then
+            ENC=$(cat /tmp/appium-key.log | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=Android Appium log (key lines)::${ENC}"
+          fi
+          ENC2=$(tail -c 3500 appium.log | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+          echo "::error title=Android Appium log (tail)::${ENC2}"
+
+      - name: Dump logcat on failure
+        if: failure()
+        run: |
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          LOGCAT=$(adb logcat -d -t 500 2>/dev/null || true)
+          printf '%s\n' "$LOGCAT"
+          TAIL=$(printf '%s' "$LOGCAT" | tail -c 4000 | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+          echo "::error title=Android logcat tail::${TAIL}"
+
+      - name: Stop emulator
+        if: always()
+        run: |
+          # `adb emu kill` alone often leaves QEMU running for 30+ minutes,
+          # hitting the workflow timeout. Force-kill instead.
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          adb emu kill 2>/dev/null || true
+          pkill -9 -f "qemu-system-x86" 2>/dev/null || true
+          pkill -9 -f "/emulator/emulator" 2>/dev/null || true
+          if [ -n "${EMULATOR_PID:-}" ]; then
+            kill -9 "$EMULATOR_PID" 2>/dev/null || true
+          fi
+
+      - name: Upload Appium server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appium-logs-android
+          path: |
+            appium.log
+            appium.stdout.log
+            emulator.log
+          if-no-files-found: ignore
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-android
+          path: TestResults/
+          if-no-files-found: ignore
+
+  # =====================================================================
+  # iOS: builds the sample for the simulator, boots one, runs Appium
+  # =====================================================================
+  ios:
+    name: iOS E2E
+    runs-on: macos-15
+    timeout-minutes: 75
+
+    env:
+      DOTNET_NOLOGO: 1
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      SAMPLE_PROJECT: TR.BBCodeLabel.Maui.Sample/TR.BBCodeLabel.Maui.Sample.csproj
+      TESTS_PROJECT: TR.BBCodeLabel.Maui.E2ETests/TR.BBCodeLabel.Maui.E2ETests.csproj
+      IOS_DEVICE: iPhone 16
+      IOS_VERSION: "18.5"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Print environment
+        run: |
+          set -x
+          uname -a
+          sw_vers || true
+          xcodebuild -version || true
+          echo "PATH=$PATH"
+
+      - name: Setup Xcode (latest stable on the runner)
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Print dotnet info
+        run: dotnet --info
+
+      - name: Download iOS simulator runtime (if needed)
+        run: |
+          if xcrun simctl list runtimes | grep -qi ios; then
+            echo "iOS simulator runtime already available."
+            xcrun simctl list runtimes | grep -i ios
+          else
+            echo "No iOS simulator runtime found; downloading..."
+            xcodebuild -downloadPlatform iOS
+            xcrun simctl list runtimes
+          fi
+
+      - name: Restore MAUI workloads
+        run: dotnet workload restore ${{ env.SAMPLE_PROJECT }}
+
+      - name: List installed workloads
+        run: dotnet workload list
+
+      - name: Setup Node 20 (for Appium)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Print node / npm versions
+        run: |
+          node --version
+          npm --version
+          npm config get prefix
+
+      - name: npm install -g appium
+        run: npm install -g appium
+
+      - name: appium --version
+        run: appium --version
+
+      - name: appium driver install xcuitest
+        run: |
+          set +e
+          mkdir -p "$HOME/.appium"
+          OUT=$(appium driver install xcuitest 2>&1)
+          code=$?
+          printf '%s\n' "$OUT"
+          if [ $code -ne 0 ]; then
+            ENCODED=$(printf '%s' "$OUT" | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=appium driver install xcuitest (exit ${code})::${ENCODED}"
+          fi
+          exit $code
+
+      - name: appium driver list
+        run: appium driver list --installed
+
+      - name: Boot iOS simulator
+        id: simulator
+        run: |
+          set -e
+          UDID=$(xcrun simctl list devices available -j \
+            | python3 -c "import sys,json; data=json.load(sys.stdin); \
+                          [print(d['udid']) for runs in data['devices'].values() for d in runs \
+                           if d.get('name')=='${IOS_DEVICE}'][:1]" \
+            | head -n1)
+          if [ -z "$UDID" ]; then
+            echo "::error::Simulator '${IOS_DEVICE}' not found"
+            xcrun simctl list devices available
+            exit 1
+          fi
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+          echo "Booting $UDID (${IOS_DEVICE})"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl list devices booted
+
+      - name: Build sample app for simulator
+        run: |
+          set +e
+          OUT=$(dotnet build ${{ env.SAMPLE_PROJECT }} \
+            -c Debug \
+            -f net8.0-ios \
+            -p:RuntimeIdentifier=iossimulator-arm64 \
+            -p:CodesignKey="" \
+            -p:CodesignProvision="" 2>&1)
+          code=$?
+          printf '%s\n' "$OUT"
+          if [ $code -ne 0 ]; then
+            TAIL=$(printf '%s' "$OUT" | tail -c 4000 | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=Build sample app for simulator (exit ${code})::${TAIL}"
+          fi
+          exit $code
+
+      - name: Locate .app bundle
+        id: app
+        run: |
+          APP=$(find TR.BBCodeLabel.Maui.Sample/bin/Debug/net8.0-ios -type d -name "*.app" | head -n1)
+          if [ -z "$APP" ]; then
+            echo "::error::.app bundle not found"
+            find TR.BBCodeLabel.Maui.Sample/bin -type d -name "*.app" || true
+            exit 1
+          fi
+          echo "path=$APP" >> "$GITHUB_OUTPUT"
+          echo "Built app: $APP"
+
+      - name: Start Appium server
+        run: |
+          nohup appium --base-path / --log appium.log --log-level info > appium.stdout.log 2>&1 &
+          for i in {1..30}; do
+            if curl -sSf http://127.0.0.1:4723/status > /dev/null; then
+              echo "Appium is up"; exit 0
+            fi
+            sleep 1
+          done
+          echo "Appium failed to start"; cat appium.stdout.log; exit 1
+
+      - name: Run E2E tests
+        env:
+          APPIUM_PLATFORM: ios
+          APPIUM_SERVER_URL: http://127.0.0.1:4723/
+          APP_PATH: ${{ steps.app.outputs.path }}
+          APPIUM_DEVICE_NAME: ${{ env.IOS_DEVICE }}
+          APPIUM_PLATFORM_VERSION: ${{ env.IOS_VERSION }}
+          APPIUM_UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          set +e
+          OUT=$(dotnet test ${{ env.TESTS_PROJECT }} -c Release \
+            --logger "trx;LogFileName=ios.trx" \
+            --logger "console;verbosity=detailed" \
+            --results-directory ./TestResults 2>&1)
+          code=$?
+          printf '%s\n' "$OUT"
+          if [ $code -ne 0 ]; then
+            TAIL=$(printf '%s' "$OUT" | tail -c 4000 | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=Run E2E tests iOS (exit ${code})::${TAIL}"
+          fi
+          exit $code
+
+      - name: Surface Appium log (on iOS failure)
+        if: failure()
+        run: |
+          if [ -f appium.log ]; then
+            echo '===== appium.log (tail 4000 chars) ====='
+            tail -c 4000 appium.log
+            TAIL=$(tail -c 4000 appium.log | tr '\n\r' '||' | sed 's/::/<COLONS>/g' | head -c 3500)
+            echo "::error title=iOS Appium log tail::${TAIL}"
+          else
+            echo "no appium.log produced"
+          fi
+
+      - name: Upload Appium server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appium-logs-ios
+          path: |
+            appium.log
+            appium.stdout.log
+          if-no-files-found: ignore
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-ios
+          path: TestResults/
+          if-no-files-found: ignore
+
+  # =====================================================================
+  # Windows: builds the unpackaged WinUI sample, runs Appium with the
+  # Appium Windows Driver (which wraps WinAppDriver under the hood)
+  # =====================================================================
+  windows:
+    name: Windows E2E
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    env:
+      DOTNET_NOLOGO: 1
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      SAMPLE_PROJECT: TR.BBCodeLabel.Maui.Sample\TR.BBCodeLabel.Maui.Sample.csproj
+      TESTS_PROJECT: TR.BBCodeLabel.Maui.E2ETests\TR.BBCodeLabel.Maui.E2ETests.csproj
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Print environment
+        shell: pwsh
+        run: |
+          [System.Environment]::OSVersion
+          $PSVersionTable
+          $env:PATH
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Print dotnet info
+        run: dotnet --info
+
+      - name: Restore MAUI workloads
+        run: dotnet workload restore ${{ env.SAMPLE_PROJECT }}
+
+      - name: List installed workloads
+        run: dotnet workload list
+
+      - name: Enable Windows developer mode
+        shell: pwsh
+        run: |
+          New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Force | Out-Null
+          Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Name "AllowDevelopmentWithoutDevLicense" -Value 1 -Type DWord -Force
+
+      - name: Setup Node 20 (for Appium)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Print node / npm versions
+        shell: pwsh
+        run: |
+          node --version
+          npm --version
+          npm config get prefix
+
+      - name: npm install -g appium
+        shell: pwsh
+        run: npm install -g appium
+
+      - name: appium --version
+        shell: pwsh
+        run: appium --version
+
+      - name: appium driver install windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          New-Item -ItemType Directory -Path "$env:USERPROFILE\.appium" -Force | Out-Null
+          $out = & appium driver install --source=npm appium-windows-driver 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Write-Host $out
+          if ($code -ne 0) {
+            $encoded = ($out -replace "`r`n", "|" -replace "`n", "|" -replace "::", "<COLONS>")
+            if ($encoded.Length -gt 3500) { $encoded = $encoded.Substring(0, 3500) }
+            Write-Host "::error title=appium driver install windows (exit $code)::$encoded"
+            exit $code
+          }
+
+      - name: appium driver list
+        shell: pwsh
+        run: appium driver list --installed
+
+      - name: Build sample (unpackaged WinUI)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $out = & dotnet publish ${{ env.SAMPLE_PROJECT }} `
+            -c Release `
+            -f net8.0-windows10.0.19041.0 `
+            -p:WindowsPackageType=None `
+            -p:WindowsAppSDKSelfContained=true `
+            -p:RuntimeIdentifier=win-x64 `
+            -o artifacts\windows 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Write-Host $out
+          if ($code -ne 0) {
+            $tail = $out
+            if ($tail.Length -gt 4000) { $tail = $tail.Substring($tail.Length - 4000) }
+            $encoded = ($tail -replace "`r`n", "|" -replace "`n", "|" -replace "::", "<COLONS>")
+            if ($encoded.Length -gt 3500) { $encoded = $encoded.Substring(0, 3500) }
+            Write-Host "::error title=Build sample (unpackaged WinUI) (exit $code)::$encoded"
+            exit $code
+          }
+
+      - name: Locate sample exe
+        id: app
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path artifacts\windows -Filter "TR.BBCodeLabel.Maui.Sample.exe" -Recurse | Select-Object -First 1
+          if (-not $exe) {
+            Write-Error "Sample exe not found"
+            Get-ChildItem -Path artifacts\windows -Recurse | Select-Object FullName
+            exit 1
+          }
+          "path=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Built exe: $($exe.FullName)"
+
+      - name: Start Appium server + Run E2E tests
+        shell: pwsh
+        env:
+          APPIUM_PLATFORM: windows
+          APPIUM_SERVER_URL: http://127.0.0.1:4723/
+          APP_PATH: ${{ steps.app.outputs.path }}
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $appiumCmd = (Get-Command appium.cmd -ErrorAction SilentlyContinue) ?? (Get-Command appium)
+          Write-Host "Appium command: $($appiumCmd.Source)"
+          $proc = Start-Process -FilePath $appiumCmd.Source `
+            -ArgumentList "--base-path","/","--log","appium.log","--log-level","info" `
+            -RedirectStandardOutput "appium.stdout.log" `
+            -RedirectStandardError "appium.stderr.log" `
+            -NoNewWindow -PassThru
+
+          $ready = $false
+          for ($i = 0; $i -lt 60; $i++) {
+            try {
+              $r = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:4723/status" -TimeoutSec 2
+              if ($r.StatusCode -eq 200) { $ready = $true; break }
+            } catch { }
+            Start-Sleep -Seconds 1
+          }
+          if (-not $ready) {
+            $stdout = if (Test-Path appium.stdout.log) { Get-Content appium.stdout.log -Raw } else { '<no stdout>' }
+            $stderr = if (Test-Path appium.stderr.log) { Get-Content appium.stderr.log -Raw } else { '<no stderr>' }
+            Write-Host "Appium failed to start"
+            Write-Host "===== stdout ====="; Write-Host $stdout
+            Write-Host "===== stderr ====="; Write-Host $stderr
+            $combined = "stdout:`n$stdout`n`nstderr:`n$stderr"
+            $encoded = ($combined -replace "`r`n", "|" -replace "`n", "|" -replace "::", "<COLONS>")
+            if ($encoded.Length -gt 3500) { $encoded = $encoded.Substring(0, 3500) }
+            Write-Host "::error title=Start Appium server (timeout)::$encoded"
+            exit 1
+          }
+          Write-Host "Appium is up"
+
+          $testOut = & dotnet test ${{ env.TESTS_PROJECT }} -c Release `
+            --logger "trx;LogFileName=windows.trx" `
+            --logger "console;verbosity=detailed" `
+            --results-directory .\TestResults 2>&1 | Out-String
+          $code = $LASTEXITCODE
+          Write-Host $testOut
+
+          try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch { }
+
+          if ($code -ne 0) {
+            $tail = $testOut
+            if ($tail.Length -gt 4000) { $tail = $tail.Substring($tail.Length - 4000) }
+            $encoded = ($tail -replace "`r`n", "|" -replace "`n", "|" -replace "::", "<COLONS>")
+            if ($encoded.Length -gt 3500) { $encoded = $encoded.Substring(0, 3500) }
+            Write-Host "::error title=Run E2E tests Windows (exit $code)::$encoded"
+            exit $code
+          }
+
+      - name: Upload Appium server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appium-logs-windows
+          path: |
+            appium.log
+            appium.stdout.log
+            appium.stderr.log
+          if-no-files-found: ignore
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-windows
+          path: TestResults\
+          if-no-files-found: ignore
